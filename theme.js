@@ -1,102 +1,124 @@
 const Theme = (() => {
-    const STORAGE_KEY = "vg_theme_overrides";
-    const VARS = ["--bg", "--bg2", "--bg3", "--border", "--text", "--text-dim", "--green", "--red", "--amber"];
+  const STORAGE_KEY = "debugr_theme_overrides";
+  const VARS = ["--bg", "--bg2", "--bg3", "--border", "--text", "--text-dim", "--text-muted",
+    "--green", "--red", "--amber", "--on-accent"];
 
-    const PRESETS = [
-        {
-            name: "CLASSIC",
-            vars: {
-        "--bg": "#0d0d0d", "--bg2": "#111111", "--bg3": "#161616", "--border": "#2a2a2a",
-        "--text": "#d8d8d8", "--text-dim": "#666666", "--green": "#4caf72", "--red": "#c0443a", "--amber": "#c89b3c",
-            },
-        },
-        {
-            name: "AMBER MONO",
-            vars: {
-        "--bg": "#0d0a03", "--bg2": "#161006", "--bg3": "#1e1608", "--border": "#3a2c10",
-        "--text": "#e8c878", "--text-dim": "#8a6c30", "--green": "#c89b3c", "--red": "#b5651d", "--amber": "#f0b429",                
-            },
-        },
-        {
-            name: "COLD SIGNAL",
-            vars: {
-        "--bg": "#0a0e12", "--bg2": "#0f151a", "--bg3": "#141c22", "--border": "#22323c",
-        "--text": "#cfe3ec", "--text-dim": "#5c7a88", "--green": "#4ac0b0", "--red": "#c0596a", "--amber": "#4fa3c8",                
-            },
-        },
-    ];
+  const PRESETS = [
+    { id: "dark", name: "CLASSIC" },
+    { id: "light", name: "LIGHT" },
+  ];
 
-    function applyVars(vars) {
-        for (const key of VARS) {
-            if (vars[key]) document.documentElement.style.setProperty(key, vars[key]);
-        }
-    }
-    function load() {
-        const raw = localStorage.getItem(STORAGE_KEY);
-        if (!raw) return null;
-        try {return JSON.parse(raw); } catch {return null;}
-    }
-    function save(vars) {localStorage.setItem(STORAGE_KEY, JSON.stringify(vars)); }
+  const SWATCHES = [
+    { key: "--bg", label: "Background" },
+    { key: "--text", label: "Text" },
+    { key: "--amber", label: "Accent" },
+    { key: "--green", label: "Pass (true)" },
+    { key: "--red", label: "Fail (false)" },
+  ];
 
-    function currentVars() {
-        const cs = getComputedStyle(document.documentElement);
-        const out = {};
-        for (const key of VARS) out[key] =cs.getPropertyValue(key).trim();
-        return out;
-    }
+  let state = { base: "dark", custom: {} };
 
-    function toHex(color) {
-        if (!color) return "#000000";
-        if (color.startsWith("#")) {
-            return color.length === 4 ? "#" + [...color.slice(1)].map((c) => c + c).join("") : color;
-        }
-        const m = color.match(/\d+/g);
-        if (!m) return "#000000"
-        return "#" + m.slice(0, 3).map((n) => (+n).toString(16).padStart(2, "0")).join("");
+  // storage
+  function load() {
+    try {
+      const raw = JSON.parse(localStorage.getItem(STORAGE_KEY) || "null");
+      if (!raw || typeof raw !== "object") return;
+      if (raw.base) {
+        state.base = PRESETS.some((p) => p.id === raw.base) ? raw.base : "dark";
+        state.custom = raw.custom && typeof raw.custom === "object" ? raw.custom : {};
+      } else {
+        state.custom = Object.fromEntries(Object.entries(raw).filter(([k]) => VARS.includes(k)));
+      }
+    } catch { /* ignore broken saved data */ }
+  }
+  function save() {
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch { /* storage blocked */ }
+  }
+
+  function apply() {
+    const root = document.documentElement;
+    root.setAttribute("data-theme", state.base);
+    for (const k of VARS) root.style.removeProperty(k);
+    for (const [k, v] of Object.entries(state.custom)) {
+      if (VARS.includes(k) && /^#[0-9a-f]{6}$/i.test(v)) root.style.setProperty(k, v);
     }
-    function renderPresets() {
-        const wrap = document.getElementById("theme-presets");
-        wrap.innerHTML = PRESETS.map((p) =>`<button class="btn small theme-preset-btn" data-preset="${p.name}">${p.name}</button>`).join("");
-        wrap.querySelectorAll(".theme-preset-btn").forEach((btn) => {
-            btn.addEventListener("click", () => {
-                const preset = PRESETS.find((p) => p.name === btn.dataset.preset);
-                applyVars(preset.vars);
-                save(preset.vars);
-                renderSwatches();
-            });
-        });
+  }
+  function currentVars() {
+    const cs = getComputedStyle(document.documentElement);
+    const out = {};
+    for (const k of VARS) out[k] = cs.getPropertyValue(k).trim();
+    return out;
+  }
+  function toHex(color) {
+    if (!color) return "#000000";
+    if (color.startsWith("#")) {
+      return color.length === 4 ? "#" + [...color.slice(1)].map((c) => c + c).join("") : color.slice(0, 7);
     }
-    function renderSwatches() {
-        const wrap = document.getElementById("theme-swatches");
-        const current = currentVars();
-    const labels = { "--bg": "Background", "--amber": "Accent", "--green": "Pass (true)", "--red": "Fail (false)", "--text": "Text" };
-    const keys = ["--bg", "--amber", "--green", "--red", "--text"];
-    wrap.innerHTML = keys
-      .map((k) => `
+    const m = color.match(/\d+/g);
+    if (!m) return "#000000";
+    return "#" + m.slice(0, 3).map((n) => (+n).toString(16).padStart(2, "0")).join("");
+  }
+  const rgb = (h) => [1, 3, 5].map((i) => parseInt(toHex(h).slice(i, i + 2), 16));
+  function mix(a, b, t) {
+    const A = rgb(a), B = rgb(b);
+    return "#" + A.map((v, i) => Math.round(v + (B[i] - v) * t).toString(16).padStart(2, "0")).join("");
+  }
+  function luminance(h) {
+    const [r, g, b] = rgb(h).map((v) => {
+      v /= 255;
+      return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+    });
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  }
+
+  function setColor(key, value) {
+    state.custom[key] = value;
+    const cur = { ...currentVars(), ...state.custom };
+    if (key === "--bg" || key === "--text") {
+      state.custom["--bg2"] = mix(cur["--bg"], cur["--text"], 0.05);
+      state.custom["--bg3"] = mix(cur["--bg"], cur["--text"], 0.09);
+      state.custom["--border"] = mix(cur["--bg"], cur["--text"], 0.2);
+      state.custom["--text-dim"] = mix(cur["--text"], cur["--bg"], 0.45);
+      state.custom["--text-muted"] = mix(cur["--text"], cur["--bg"], 0.7);
+    }
+    if (key === "--green" || key === "--red") {
+      // text drawn on top of a filled green/red button
+      state.custom["--on-accent"] = luminance(cur["--green"]) > 0.45 ? "#0d0d0d" : "#ffffff";
+    }
+    apply();
+    save();
+  }
+
+
+  function renderPresets() {
+    const wrap = document.getElementById("theme-presets");
+    wrap.innerHTML = PRESETS.map((p) =>
+      `<button class="btn small theme-preset-btn ${p.id === state.base ? "active" : ""}" data-preset="${p.id}">${p.name}</button>`).join("");
+    wrap.querySelectorAll(".theme-preset-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        state = { base: btn.dataset.preset, custom: {} };
+        apply(); save();
+        renderPresets(); renderSwatches();
+      });
+    });
+  }
+  function renderSwatches() {
+    const wrap = document.getElementById("theme-swatches");
+    const cur = currentVars();
+    wrap.innerHTML = SWATCHES.map((s) => `
       <label class="theme-swatch">
-        <span>${labels[k]}</span>
-        <input type="color" data-var="${k}" value="${toHex(current[k])}" />
-      </label>`)
-      .join("");
+        <span>${s.label}</span>
+        <input type="color" data-var="${s.key}" value="${toHex(cur[s.key])}" />
+      </label>`).join("");
     wrap.querySelectorAll("input[type=color]").forEach((input) => {
-        input.addEventListener("input", () => {
-            document.documentElement.style.setProperty(input.dataset.var, input.value); 
-        save(currentVars());
+      input.addEventListener("input", () => setColor(input.dataset.var, input.value));
     });
-    });
-    }
-
-    function reset() {
-        localStorage.removeItem(STORAGE_KEY);
-        applyVars(PRESETS[0].vars);
-        renderSwatches();
-    }
-
-    function init() {
-        const saved = load();
-        if (saved) applyVars(saved);
-    }
-
+  }
+  function reset() {
+    state.custom = {};
+    apply(); save();
+    renderSwatches();
+  }
 
   document.getElementById("theme-btn").addEventListener("click", () => {
     renderPresets();
@@ -107,7 +129,8 @@ const Theme = (() => {
     document.getElementById("theme-prompt").classList.add("hidden");
   });
   document.getElementById("theme-reset-btn").addEventListener("click", reset);
- 
-  init();
+
+  load();
+  apply();
   return {};
 })();
