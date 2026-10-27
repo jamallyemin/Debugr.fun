@@ -48,6 +48,7 @@ const FirebaseClient = (() => {
     await db.collection("streaks").doc(uid).set({
       nickname, dailyStreak: daily, winStreak: win,
       lastPlayDate: new Date().toISOString().slice(0, 10),
+      avatar: PlayerState.getAvatar(),
       updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
     }, { merge: true });
   }
@@ -107,7 +108,7 @@ const FirebaseClient = (() => {
       difficulty, hostUid: uid, started: false, winnerUid: null,
       createdAt: firebase.firestore.FieldValue.serverTimestamp(),
     });
-    await db.collection("rooms").doc(code).collection("players").doc(uid).set({ nickname, done: false });
+    await db.collection("rooms").doc(code).collection("players").doc(uid).set({ nickname, done: false, avatar: PlayerState.getAvatar() });
     return code;
   }
 
@@ -116,14 +117,14 @@ const FirebaseClient = (() => {
     const snap = await ref.get();
     if (!snap.exists) throw new Error("Room not found.");
     if (snap.data().started) throw new Error("That race already started.");
-    await ref.collection("players").doc(uid).set({ nickname, done: false });
+    await ref.collection("players").doc(uid).set({ nickname, done: false, avatar: PlayerState.getAvatar() });
     return snap.data();
   }
 
   function listenRoomPlayers(code, cb) {
     return db.collection("rooms").doc(code).collection("players").onSnapshot((snap) => {
       const players = [];
-      for (const doc of snap.docs) players.push({ token: doc.id, nickname: doc.data().nickname, done: doc.data().done });
+      for (const doc of snap.docs) players.push({ token: doc.id, nickname: doc.data().nickname, done: doc.data().done, avatar: doc.data().avatar });
       cb(players);
     });
   }
@@ -164,7 +165,92 @@ const FirebaseClient = (() => {
     await db.collection("rooms").doc(code).collection("players").doc(uid).delete().catch(() => {});
   }
 
+
+  // avatar
+  async function setAvatar(avatar) {
+    if (!uid) return;
+    await db.collection("players").doc(uid).set({ avatar }, { merge: true });
+  }
+
+  // puzzle rankings, one counter per player per day / week
+  async function bumpCounter(collection, field, value, data) {
+    const ref = db.collection(collection).doc(uid + "_" + value);
+    await db.runTransaction(async (tx) => {
+      const snap = await tx.get(ref);
+      const solved = snap.exists ? (snap.data().solved || 0) + 1 : 1;
+      tx.set(ref, { uid, nickname: data.nickname, avatar: data.avatar, [field]: value, solved,
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+    });
+  }
+  async function recordPuzzleSolve({ nickname, avatar }) {
+    if (!uid || !nickname) return;
+    const data = { nickname, avatar };
+    await Promise.all([
+      bumpCounter("puzzleDaily", "date", todayKey(), data),
+      bumpCounter("puzzleWeekly", "week", weekKey(), data),
+    ]);
+  }
+  // only one equality filter and the sort happens here, so no composite index needed
+  async function fetchPuzzleTop(period) {
+    const weekly = period === "weekly";
+    const snap = await db.collection(weekly ? "puzzleWeekly" : "puzzleDaily")
+      .where(weekly ? "week" : "date", "==", weekly ? weekKey() : todayKey()).limit(200).get();
+    return snap.docs.map((d) => ({ token: d.data().uid, ...d.data() })).sort((a, b) => b.solved - a.solved).slice(0, 10);
+  }
+
+  // daily challenge
+  async function submitDaily({ date, difficulty, elapsedMs, nickname, avatar }) {
+    await db.collection("dailyScores").doc(uid + "_" + date).set({
+      uid, nickname, avatar, date, difficulty, elapsedMs: Math.round(elapsedMs),
+      createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+    });
+  }
+  async function fetchDaily(date) {
+    const snap = await db.collection("dailyScores").where("date", "==", date).limit(200).get();
+    return snap.docs.map((d) => d.data()).sort((a, b) => a.elapsedMs - b.elapsedMs).slice(0, 10);
+  }
+  async function fetchMyDaily(date) {
+    if (!uid) return null;
+    const snap = await db.collection("dailyScores").doc(uid + "_" + date).get();
+    return snap.exists ? snap.data() : null;
+  }
+
+  // feedback
+  async function submitFeedback(data) {
+    await db.collection("feedback").add({
+      uid, ...data, createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+    });
+  }
+
+  // cloud save
+  function getUser() { return auth ? auth.currentUser : null; }
+  async function loadSave() {
+    if (!uid) return null;
+    const snap = await db.collection("saves").doc(uid).get();
+    return snap.exists ? snap.data() : null;
+  }
+  async function writeSave(data) {
+    await db.collection("saves").doc(uid).set({ ...data, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+  }
+  async function linkGoogle() {
+    const provider = new firebase.auth.GoogleAuthProvider();
+    try {
+      const res = await auth.currentUser.linkWithPopup(provider);
+      return { mode: "linked", email: res.user.email };
+    } catch (err) {
+      // google account already has a save from another device, switch to it
+      if (err.code === "auth/credential-already-in-use" && err.credential) {
+        const res = await auth.signInWithCredential(err.credential);
+        uid = res.user.uid;
+        return { mode: "switched", email: res.user.email };
+      }
+      throw err;
+    }
+  }
+
   return {
+    setAvatar, recordPuzzleSolve, fetchPuzzleTop, submitDaily, fetchDaily, fetchMyDaily,
+    submitFeedback, getUser, loadSave, writeSave, linkGoogle,
     init, getUid, claimNickname, submitScore, updateStreaks, fetchLeaderboard,
     hostRoom, joinRoom, listenRoomPlayers, listenRoomState, startRace, submitRaceSolution, leaveRoom,
   };

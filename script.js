@@ -22,17 +22,26 @@
   const SCREENS = {
     menu: "screen-menu", difficulty: "screen-difficulty", host: "screen-host",
     join: "screen-join", leaderboard: "screen-leaderboard", game: "screen-game",
-    puzzleSelect: "screen-puzzle-select", puzzles: "screen-puzzles",
+    puzzleSelect: "screen-puzzle-select", puzzles: "screen-puzzles", daily: "screen-daily",
   };
   let currentRoomCode = null;
   let roomUnsubscribers = [];
 
+  let currentScreen = "menu";
   function showScreen(name) {
     for (const id of Object.values(SCREENS)) document.getElementById(id).classList.add("hidden");
     document.getElementById(SCREENS[name]).classList.remove("hidden");
     document.getElementById("success-screen").classList.add("hidden");
+    currentScreen = name;
+    document.dispatchEvent(new CustomEvent("debugr:screen", { detail: { name } }));
   }
-  window.App = { showScreen }; // bridge for tutorial.js
+  function goHome() { teardownGame(); showScreen("menu"); }
+  // bridge for tutorial.js, keys.js, daily.js and the puzzles
+  window.App = {
+    showScreen, goHome, startGame,
+    current: () => currentScreen,
+    inRun: () => currentScreen === "game" && !!task && !dead,
+  };
 
   // header: nickname + streak display
   function refreshHeader() {
@@ -40,6 +49,7 @@
     const streak = PlayerState.getStreakCache();
     document.getElementById("streak-count").textContent = streak.daily;
     document.getElementById("streak-chip").classList.toggle("hot", streak.daily >= 3);
+    if (typeof Rewards !== "undefined") Rewards.refresh();
   }
 
   function bumpDailyStreak() {
@@ -52,7 +62,7 @@
       PlayerState.setStreakCache(streak);
     }
     refreshHeader();
-    FirebaseClient.updateStreaks({ nickname: PlayerState.getNickname(), daily: streak.daily, win: streak.win }).catch(() => {});
+    FirebaseClient.updateStreaks({ nickname: PlayerState.getNickname(), daily: streak.daily, win: streak.win }).catch(() => { });
   }
 
   // nickname onboarding
@@ -139,12 +149,13 @@
   document.getElementById("logo-home-btn").addEventListener("click", () => { teardownGame(); showScreen("menu"); });
 
   document.addEventListener("keydown", (e) => {
+    if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey) return;
+    if (/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return; // dont jump around while typing
+    if (document.querySelector(".modal-backdrop:not(.hidden)")) return;
     if (!document.getElementById(SCREENS.menu).classList.contains("hidden")) {
-      if (e.key === "1") document.querySelector('[data-action="singleplayer"]').click();
-      if (e.key === "2") document.querySelector('[data-action="host"]').click();
-      if (e.key === "3") document.querySelector('[data-action="join"]').click();
-      if (e.key === "4") document.querySelector('[data-action="leaderboard"]').click();
-      if (e.key === "5") document.querySelector('[data-action="puzzles"]').click();
+      const act = { 1: "singleplayer", 2: "host", 3: "join", 4: "leaderboard", 5: "puzzles" }[e.key];
+      // preventDefault so keys.js doesnt also treat the same 1/2/3 as a difficulty pick
+      if (act) { e.preventDefault(); document.querySelector(`[data-action="${act}"]`).click(); }
     }
   });
 
@@ -177,12 +188,12 @@
 
     roomUnsubscribers.push(FirebaseClient.listenRoomPlayers(code, (players) => {
       const hostList = document.getElementById("host-player-list");
-      hostList.innerHTML = players.map((p) => `<li>${p.nickname}<span class="status">READY</span></li>`).join("");
+      hostList.innerHTML = players.map((p) => `<li>${Rewards.pfp(p.avatar)}${esc(p.nickname)}<span class="status">READY</span></li>`).join("");
       document.getElementById("start-race-btn").disabled = players.length < 2;
 
       const joinList = document.getElementById("join-player-list");
       if (joinList) {
-        joinList.innerHTML = players.map((p) => `<li>${p.nickname}</li>`).join("");
+        joinList.innerHTML = players.map((p) => `<li>${Rewards.pfp(p.avatar)}${esc(p.nickname)}</li>`).join("");
         document.getElementById("join-waiting").classList.remove("hidden");
       }
       renderOpponents(players);
@@ -192,8 +203,10 @@
       if (state.started && state.task && task?.id !== state.task.id) {
         startGame(state.difficulty, "multiplayer", TaskEngine.rebuildTask(state.task));
       }
-      if (state.winnerUid) {
+      if (state.winnerUid && !raceDone) {
+        raceDone = true;
         const iWon = state.winnerUid === FirebaseClient.getUid();
+        if (iWon) { PlayerState.bumpStat("wins"); Rewards.check(); }
         showSuccess({ won: iWon, elapsedMs: state.winnerElapsedMs, isMultiplayer: true, opponentName: state.winnerNickname });
       }
     }));
@@ -220,7 +233,7 @@
     strip.classList.remove("hidden");
     strip.innerHTML = players
       .filter((p) => p.token !== FirebaseClient.getUid())
-      .map((p) => `<span class="opponent-chip ${p.done ? "done" : ""}">${p.nickname}${p.done ? " ✓" : "…"}</span>`)
+      .map((p) => `<span class="opponent-chip ${p.done ? "done" : ""}">${Rewards.pfp(p.avatar)}${esc(p.nickname)}${p.done ? " ✓" : "…"}</span>`)
       .join("");
   }
 
@@ -245,7 +258,7 @@
         html += `
           <tr class="${r.token === FirebaseClient.getUid() ? "you" : ""}">
             <td class="lb-rank ${rankClass}">${i + 1}</td>
-            <td>${r.nickname}</td><td>${r.wins}</td><td>${r.bestTime ?? "—"}</td><td>${r.winStreak}</td>
+            <td>${esc(r.nickname)}</td><td>${r.wins}</td><td>${r.bestTime ?? "—"}</td><td>${r.winStreak}</td>
           </tr>`;
       }
       body.innerHTML = html;
@@ -264,7 +277,7 @@
   const saveBtn = document.getElementById("save-btn");
   const modeLabel = document.getElementById("game-mode-label");
 
-  let task = null, mode = "singleplayer", difficulty = "easy";
+  let task = null, mode = "singleplayer", difficulty = "easy", raceDone = false;
   let secs = 45, dead = false, hadShred = false, tick = null, shred = null, startedAt = 0;
 
   function buildRulesUI() {
@@ -315,13 +328,20 @@
       FirebaseClient.submitRaceSolution(currentRoomCode, PlayerState.getNickname(), elapsedMs);
       // room listener's winnerUid callback (see subscribeToRoom) shows the
       // success/defeat screen once the Firestore transaction settles
+    } else if (mode === "daily") {
+      bumpDailyStreak();
+      document.dispatchEvent(new CustomEvent("debugr:daily-win", { detail: { elapsedMs, difficulty } }));
+      showSuccess({ won: true, elapsedMs, isMultiplayer: false });
     } else {
       bumpDailyStreak();
+      PlayerState.bumpStat("wins");
+      Rewards.check();
+      document.dispatchEvent(new CustomEvent("debugr:progress"));
       const streak = PlayerState.getStreakCache();
       streak.win = hadShred ? 0 : streak.win + 1;
       PlayerState.setStreakCache(streak);
-      FirebaseClient.submitScore({ difficulty, elapsedMs, nickname: PlayerState.getNickname() }).catch(() => {});
-      FirebaseClient.updateStreaks({ nickname: PlayerState.getNickname(), daily: streak.daily, win: streak.win }).catch(() => {});
+      FirebaseClient.submitScore({ difficulty, elapsedMs, nickname: PlayerState.getNickname() }).catch(() => { });
+      FirebaseClient.updateStreaks({ nickname: PlayerState.getNickname(), daily: streak.daily, win: streak.win }).catch(() => { });
       showSuccess({ won: true, elapsedMs, isMultiplayer: false });
     }
   }
@@ -340,7 +360,8 @@
     document.getElementById("stat-time").textContent = (elapsedMs / 1000).toFixed(1) + "s";
     document.getElementById("stat-streak").textContent = PlayerState.getStreakCache().win;
     document.getElementById("stat-diff").textContent = difficulty.toUpperCase();
-    document.getElementById("next-task-btn").classList.toggle("hidden", isMultiplayer);
+    document.getElementById("next-task-btn").classList.toggle("hidden", isMultiplayer || mode === "daily");
+    document.getElementById("daily-share-btn").classList.toggle("hidden", mode !== "daily" || !won);
     screen.classList.remove("hidden");
   }
 
@@ -371,9 +392,9 @@
   function startGame(diff, gameMode, presetTask) {
     difficulty = diff; mode = gameMode;
     task = presetTask || TaskEngine.generateTask(diff);
-    dead = false; hadShred = false; secs = 45; startedAt = Date.now();
+    dead = false; hadShred = false; raceDone = false; secs = 45; startedAt = Date.now();
     editor.value = "";
-    modeLabel.textContent = `${gameMode === "singleplayer" ? "SINGLEPLAYER" : "RACE"} · ${diff.toUpperCase()}`;
+    modeLabel.textContent = `${{ singleplayer: "SINGLEPLAYER", daily: "DAILY", multiplayer: "RACE" }[gameMode]} · ${diff.toUpperCase()}`;
     document.getElementById("opponents-strip").classList.toggle("hidden", gameMode !== "multiplayer");
     buildRulesUI(); updateLines(); drawTimer();
     clearInterval(tick);
@@ -391,6 +412,14 @@
     roomUnsubscribers = [];
     currentRoomCode = null;
     task = null;
+    // put the host / join screens back to how they start, otherwise they show the old room
+    document.getElementById("host-pre-code").classList.remove("hidden");
+    document.getElementById("host-post-code").classList.add("hidden");
+    document.getElementById("host-player-list").innerHTML = "";
+    document.getElementById("join-waiting").classList.add("hidden");
+    document.getElementById("join-player-list").innerHTML = "";
+    document.getElementById("join-code-input").value = "";
+    document.getElementById("join-error").textContent = "";
   }
 
   editor.addEventListener("input", () => { updateLines(); run(); });

@@ -1,264 +1,495 @@
 <!DOCTYPE html>
 <html lang="en">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width", initial-scale="1.0">
-        <title>Debugr.fun</title>
-        <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20,400,0,0">
-        <link rel="stylesheet" href="style.css">
-    </head>
-    <body>
-        <div class="crt-overlay" aria-hidden="true"></div>
-        <canvas id="grain-canvas" aria-hidden="true"></canvas>
- 
-        <div class="app-wrapper">
-            <header class="game-header">
-                <div class="header-left">
-                    <span class="game-title" id="logo-home-btn">Debugr.fun</span>
-                    <span class="game subtitle">// endless python puzzles</span>
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Debugr.fun</title>
+    <link rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20,400,0,0">
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+    <div class="crt-overlay" aria-hidden="true"></div>
+    <canvas id="grain-canvas" aria-hidden="true"></canvas>
+
+    <div class="app-wrapper">
+        <header class="game-header">
+            <div class="header-left">
+                <span class="game-title" id="logo-home-btn">Debugr.fun</span>
+                <span class="game-subtitle">// endless debugging puzzles</span>
+            </div>
+            <div class="header-right">
+                <button class="btn small key-chip hidden" id="key-chip" title="Go back (Esc)"><kbd>ESC</kbd>
+                    BACK</button>
+                <div class="streak-chip" id="streak-chip"><span class="flame">▲</span><span id="streak-count">0</span>
+                    day streak</div>
+                <div class="identity-badge">
+                    <button class="avatar-btn" id="avatar-btn" title="Profile picture"
+                        aria-label="Choose profile picture"></button>
+                    <span class="nickname" id="nickname-display">GUEST</span>
+                    <button class="btn small" id="change-nickname-btn">EDIT</button>
                 </div>
-                <div class="header-right">
-                    <div class="streak-chip" id="streak-chip"><span class="flame">▲</span><span id="streak-count">0</span> day streak</div>
-                    <div class="identity-badge">
-                        <span class="nickname" id="nickname-display">GUEST</span>
-                        <button class="btn small" id="change-nickname-btn">EDIT</button>
+                <button class="btn small" id="settings-btn" title="Settings (S)">SETTINGS</button>
+            </div>
+        </header>
+
+        <div class="screen" id="screen-container">
+            <!--main menu-->
+            <section class="menu-screen" id="screen-menu">
+                <div class="menu-status" id="menu-status" aria-live="polite">
+                    <div class="ms-head"><span class="ms-dot"></span>debugr.fun runtime<span
+                            class="ms-online">online</span></div>
+                    <div class="ms-body">
+                        <span class="ms-pfp" id="ms-pfp"></span>
+                        <div class="ms-lines">
+                            <div class="ms-line" style="--i:0"><span class="k">user</span><span class="v"
+                                    id="ms-user">GUEST</span></div>
+                            <div class="ms-line" style="--i:1"><span class="k">daily streak</span><span class="v"
+                                    id="ms-daily">0</span></div>
+                            <div class="ms-line" style="--i:2"><span class="k">puzzles cleared</span><span class="v"
+                                    id="ms-puzzles">0</span></div>
+                            <div class="ms-line" style="--i:3"><span class="k">top solver today</span><span class="v"
+                                    id="ms-top">-</span></div>
+                        </div>
                     </div>
-                     <button class="btn small" id="theme-btn">THEME</button>
+                    <div class="ms-prompt">&gt; ready<span class="ms-cursor">█</span></div>
                 </div>
-            </header>
-            <div class="screen" id="screen-container">
-                <!--main menu-->
-                <section class="menu-screen" id="screen-menu">
-                   <div class="menu-ascii">
-                    ┌────────────────────────────┐
-                    │  &gt; debugr.fun runtime         │
-                    │  &gt; status: online             │
-                    └────────────────────────────┘</div>
-                    <div>
-                        <div class="menu-heading">MAIN MENU</div>
-                        <div class="menu-tagline">choose a mode</div>
+                <div>
+                    <div class="menu-heading">MAIN MENU</div>
+                    <div class="menu-tagline">choose a mode</div>
+                </div>
+                <div class="daily-hero" id="daily-hero">
+                    <div class="dh-top"><span class="dh-label"><span
+                                class="material-symbols-outlined menu-icon">today</span>DAILY CHALLENGE</span><span
+                            class="daily-badge" id="dh-badge">MEDIUM</span></div>
+                    <div class="dh-status" id="dh-status">one task, the same for everyone</div>
+                    <div class="dh-timer" id="dh-timer"></div>
+                    <div class="dh-actions">
+                        <button class="btn primary small" id="dh-play-btn">[ PLAY ] <span
+                                class="key-hint">D</span></button>
+                        <button class="btn small" id="dh-rank-btn">RANKING</button>
                     </div>
-                    <div class="menu-options">
-                        <button class="btn primary" data-action="singleplayer"><span class="material-symbols-outlined menu-icon">person</span>SINGLEPLAYER <span class="key-hint">[1]</span></button>
-                        <button class="btn" data-action="host"><span class="material-symbols-outlined menu-icon">group_add</span>HOST A ROOM <span class="key-hint">[2]</span></button>
-                        <button class="btn" data-action="join"><span class="material-symbols-outlined menu-icon">group</span>JOIN A ROOM <span class="key-hint">[3]</span></button>
-                        <button class="btn" data-action="leaderboard"><span class="material-symbols-outlined menu-icon">leaderboard</span>LEADERBOARD <span class="key-hint">[4]</span></button>
-                        <button class="btn" data-action="puzzles"><span class="material-symbols-outlined menu-icon">extension</span>PUZZLES <span class="key-hint">[5]</span></button>
+                </div>
+                <div class="menu-options">
+                    <button class="btn primary" data-action="singleplayer"><span
+                            class="material-symbols-outlined menu-icon">person</span><span
+                            class="menu-label">SINGLEPLAYER</span><span class="key-hint">[1]</span></button>
+                    <button class="btn" data-action="host"><span
+                            class="material-symbols-outlined menu-icon">group_add</span><span class="menu-label">HOST A
+                            ROOM</span><span class="key-hint">[2]</span></button>
+                    <button class="btn" data-action="join"><span
+                            class="material-symbols-outlined menu-icon">group</span><span class="menu-label">JOIN A
+                            ROOM</span><span class="key-hint">[3]</span></button>
+                    <button class="btn" data-action="leaderboard"><span
+                            class="material-symbols-outlined menu-icon">leaderboard</span><span
+                            class="menu-label">LEADERBOARD</span><span class="key-hint">[4]</span></button>
+                    <button class="btn" data-action="puzzles"><span
+                            class="material-symbols-outlined menu-icon">extension</span><span
+                            class="menu-label">PUZZLES</span><span class="key-hint">[5]</span></button>
+                </div>
+                <div class="menu-footer-links">
+                    <span data-action="tutorial">HOW TO PLAY</span>
+                </div>
+            </section>
+
+            <!-- select difficulty-->
+            <section class="difficulty-screen hidden" id="screen-difficulty">
+                <div class="menu-heading" style="font-size: 28px;">SELECT DIFFICULTY</div>
+                <div class="difficulty-cards">
+                    <div class="diff-card" data-diff="easy">
+                        <div class="diff-name">EASY</div>
+                        <div class="diff-desc">1 rule per task. Good for warming up your fingers.</div>
+                        <div class="diff-meta">~2 variables</div>
                     </div>
-                    <div class="menu-footer-links">
-                        <span data-action="tutorial">HOW TO PLAY</span>
-                        <a href="https://github.com/jamallyemin/The-Variable-Game" target="_blank" rel="noopener">SOURCE</a>
+                    <div class="diff-card" data-diff="medium">
+                        <div class="diff-name">MEDIUM</div>
+                        <div class="diff-desc">3 combined rules. You'll need to think ahead a little.</div>
+                        <div class="diff-meta">~3-4 variables</div>
                     </div>
-                </section>
-                
-                <!-- select diifculty-->
-                 <section class="difficulty-screen hidden" id="screen-difficulty">
-                    <div class="menu-heading" style="font-size: 28px;">SELECT DIFFICULTY</div>
-                    <div class="difficulty-cards">
-                        <div class="diff-card" data-diff="easy">
-                            <div class="diff-name">EASY</div>
-                            <div class="diff-desc">1 rule per task. Good for warming up your fingers.</div>
-                            <div class="diff-meta">~2 variables</div>
-                        </div>
-                        <div class="diff-card" data-diff="medium">
-                            <div class="diff-name">MEDIUM</div>
-                            <div class="diff-desc">3 combined rules. You'll need to think ahead a little.</div>
-                            <div class="diff-meta">~3-4 variables</div>
-                        </div>
-                        <div class="diff-card" data-diff="hard">
-                            <div class="diff-name">HARD</div>
-                            <div class="diff-desc">5 interlocking rules. Nothing repeats — nothing is safe.</div>
-                            <div class="diff-meta">~5-6 variables</div>
-                        </div>
+                    <div class="diff-card" data-diff="hard">
+                        <div class="diff-name">HARD</div>
+                        <div class="diff-desc">5 interlocking rules. Nothing repeats — nothing is safe.</div>
+                        <div class="diff-meta">~5-6 variables</div>
                     </div>
-                    <button class="btn" data-action="back-to-menu">[ BACK ]</button>
-                 </section>
- 
-                 <!--host room-->
-                 <section class="lobby-screen hidden" id="screen-host">
-                    <div class="lobby-box">
-                        <h2>HOST A ROOM</h2>
-                        <div id="host-pre-code">
-                            <p style="font-size: 12px;color: var(--text-dim);margin-bottom: 14px;">Pick a difficulty, then share a room code with your friends.</p>
-                            <div class="difficulty-cards" style="margin-bottom: 16px;">
-                                <div class="diff-card" data-diff="easy" style="width:auto;flex:1;padding:12px;"><div class="diff-name" style="font-size:18px;">EASY</div></div>
-                                <div class="diff-card" data-diff="medium" style="width:auto;flex:1;padding:12px;"><div class="diff-name" style="font-size:18px;">MEDIUM</div></div>
-                                <div class="diff-card" data-diff="hard" style="width:auto;flex:1;padding:12px;"><div class="diff-name" style="font-size:18px;">HARD</div></div>
+                </div>
+                <button class="btn" data-action="back-to-menu">[ BACK ]</button>
+            </section>
+
+            <!--host room-->
+            <section class="lobby-screen hidden" id="screen-host">
+                <div class="lobby-box">
+                    <h2>HOST A ROOM</h2>
+                    <div id="host-pre-code">
+                        <p style="font-size: 12px;color: var(--text-dim);margin-bottom: 14px;">Pick a difficulty, then
+                            share a room code with your friends.</p>
+                        <div class="difficulty-cards" style="margin-bottom: 16px;">
+                            <div class="diff-card" data-diff="easy" style="width:auto;flex:1;padding:12px;">
+                                <div class="diff-name" style="font-size:18px;">EASY</div>
+                            </div>
+                            <div class="diff-card" data-diff="medium" style="width:auto;flex:1;padding:12px;">
+                                <div class="diff-name" style="font-size:18px;">MEDIUM</div>
+                            </div>
+                            <div class="diff-card" data-diff="hard" style="width:auto;flex:1;padding:12px;">
+                                <div class="diff-name" style="font-size:18px;">HARD</div>
                             </div>
                         </div>
-                        <div id="host-post-code" class="hidden">
-                            <div class="room-code-display" id="room-code-value">— — — —</div>
-                            <ul class="player-list" id="host-player-list"></ul>
-                            <div class="lobby-actions">
-                                <button class="btn primary" id="start-race-btn" disabled>[ START RACE ]</button>
-                                <button class="btn danger" data-action="back-to-menu">[ CANCEL ]</button>
-                            </div>
-                        </div>
                     </div>
-                 </section>
-                 <!--join lobby-->
-                 <section class="lobby-screen hidden" id="screen-join">
-                    <div class="lobby-box">
-                        <h2>JOIN A ROOM</h2>
-                        <input class="lobby-input" id="join-code-input" placeholder="ROOM CODE" maxlength="4" style="text-transform: uppercase;" />
-                        <div class="error-text" id="join-error"></div>
-                        <div id="join-waiting" class="hidden">
-                            <ul class="player-list" id="join-player-list"></ul>
-                            <p style="font-size: 11px;color: var(--text-muted);">waiting for host to start...</p>
-                        </div>
+                    <div id="host-post-code" class="hidden">
+                        <div class="room-code-display" id="room-code-value">— — — —</div>
+                        <ul class="player-list" id="host-player-list"></ul>
                         <div class="lobby-actions">
-                            <button class="btn primary" id="join-submit-btn">[ JOIN ]</button>
+                            <button class="btn primary" id="start-race-btn" disabled>[ START RACE ]</button>
                             <button class="btn danger" data-action="back-to-menu">[ CANCEL ]</button>
                         </div>
                     </div>
-                 </section>
-                 <!--leaderboard-->
-                 <section class="leaderboard-screen hidden" id="screen-leaderboard">
-                    <div class="lb-tabs">
-                      <div class="lb-tab active" data-lbtab="easy">EASY</div>
-                      <div class="lb-tab" data-lbtab="medium">MEDIUM</div>
-                      <div class="lb-tab" data-lbtab="hard">HARD</div>
-                      <div class="lb-tab" data-lbtab="streak">STREAKS</div>
+                </div>
+            </section>
+
+            <!--join lobby-->
+            <section class="lobby-screen hidden" id="screen-join">
+                <div class="lobby-box">
+                    <h2>JOIN A ROOM</h2>
+                    <input class="lobby-input" id="join-code-input" placeholder="ROOM CODE" maxlength="4"
+                        style="text-transform: uppercase;" />
+                    <div class="error-text" id="join-error"></div>
+                    <div id="join-waiting" class="hidden">
+                        <ul class="player-list" id="join-player-list"></ul>
+                        <p style="font-size: 11px;color: var(--text-muted);">waiting for host to start...</p>
                     </div>
-                    <table class="lb-table">
-                        <thead><tr><th>#</th><th>PLAYER</th><th>WINS</th><th>BEST TIME</th><th>WIN STREAK</th></tr></thead>
-                        <tbody id="lb-body"><tr><td colspan="5" style="color:var(--text-muted);">loading — connect a backend to populate this</td></tr></tbody>
-                    </table>
-                    <button class="btn" style="margin-top: 20px;" data-action="back-to-menu">[ BACK ]</button>
-                 </section>
- 
-                 <!--game screen-->
-                 <section class="hidden" id="screen-game">
-                    <div class="game-body">
-                        <aside class="rules-panel" id="rules-panel">
-                            <div class="rules-header">
-                                <span class="rules-title" id="game-mode-label">SINGLEPLAYER · EASY</span>
-                                <span id="rules-progress" class="rules-progress">TASK 1</span>
-                            </div>
-                            <ul class="rules-list" id="rules-list"></ul>
-                            <div class="opponents-strip hidden" id="opponents-strip"></div>
-                        </aside>
-                        <main class="editor-panel">
-                            <div class="editor-topbar">
-                                <span class="editor-label">script.py</span>
-                                <div class="save-section">
-                                    <div class="timer-wrap">
-                                        <span class="timer-label">MEMORY SYNC</span>
-                                        <span id="timer-display" class="timer-value">45</span>
-                                        <span class="timer-unit">s</span>
-                                    </div>
-                                    <button id="save-btn" class="btn small">SYNC MEMORY</button>
+                    <div class="lobby-actions">
+                        <button class="btn primary" id="join-submit-btn">[ JOIN ]</button>
+                        <button class="btn danger" data-action="back-to-menu">[ CANCEL ]</button>
+                    </div>
+                </div>
+            </section>
+
+            <!--daily challenge-->
+            <section class="daily-screen hidden" id="screen-daily">
+                <div class="menu-heading" style="font-size: 28px;">DAILY CHALLENGE</div>
+                <div class="menu-tagline" id="daily-date">—</div>
+                <div class="daily-card">
+                    <div class="daily-badge" id="daily-badge">MEDIUM</div>
+                    <p class="daily-text" id="daily-status">One task, the same for everyone. Your first clear of the day
+                        counts. A new one arrives at 00:00 UTC.</p>
+                    <div class="daily-actions">
+                        <button class="btn primary" id="daily-start-btn">[ START ]</button>
+                        <button class="btn hidden" id="daily-copy-btn">[ COPY RESULT ]</button>
+                    </div>
+                </div>
+                <div class="daily-board">
+                    <div class="daily-board-title">TOP 10 TODAY</div>
+                    <ol class="daily-list" id="daily-list">
+                        <li class="daily-empty">loading...</li>
+                    </ol>
+                </div>
+                <button class="btn" data-action="back-to-menu">[ BACK ]</button>
+            </section>
+
+            <!--leaderboard-->
+            <section class="leaderboard-screen hidden" id="screen-leaderboard">
+                <div class="lb-tabs">
+                    <div class="lb-tab active" data-lbtab="easy">EASY</div>
+                    <div class="lb-tab" data-lbtab="medium">MEDIUM</div>
+                    <div class="lb-tab" data-lbtab="hard">HARD</div>
+                    <div class="lb-tab" data-lbtab="streak">STREAKS</div>
+                </div>
+                <table class="lb-table">
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>PLAYER</th>
+                            <th>WINS</th>
+                            <th>BEST TIME</th>
+                            <th>WIN STREAK</th>
+                        </tr>
+                    </thead>
+                    <tbody id="lb-body">
+                        <tr>
+                            <td colspan="5" style="color:var(--text-muted);">loading — connect a backend to populate
+                                this</td>
+                        </tr>
+                    </tbody>
+                </table>
+                <button class="btn" style="margin-top: 20px;" data-action="back-to-menu">[ BACK ]</button>
+            </section>
+
+            <!--game screen-->
+            <section class="hidden" id="screen-game">
+                <div class="game-body">
+                    <aside class="rules-panel" id="rules-panel">
+                        <div class="rules-header">
+                            <span class="rules-title" id="game-mode-label">SINGLEPLAYER · EASY</span>
+                            <span id="rules-progress" class="rules-progress">TASK 1</span>
+                        </div>
+                        <ul class="rules-list" id="rules-list"></ul>
+                        <div class="opponents-strip hidden" id="opponents-strip"></div>
+                    </aside>
+                    <main class="editor-panel">
+                        <div class="editor-topbar">
+                            <span class="editor-label">script.py</span>
+                            <div class="save-section">
+                                <div class="timer-wrap">
+                                    <span class="timer-label">MEMORY SYNC</span>
+                                    <span id="timer-display" class="timer-value">45</span>
+                                    <span class="timer-unit">s</span>
                                 </div>
+                                <button id="save-btn" class="btn small">SYNC MEMORY</button>
                             </div>
-                            <div class="editor-container">
-                                <div id="line-numbers" class="line-numbers">1</div>
-                                <textarea id="code-editor" class="code-editor" spellcheck="false" autocorrect="off" autocapitalize="off" placeholder="# start writing your python script here..."></textarea>
-                            </div>
-                        </main>
-                    </div>
-                 </section>
+                        </div>
+                        <div class="editor-container">
+                            <div id="line-numbers" class="line-numbers">1</div>
+                            <textarea id="code-editor" class="code-editor" spellcheck="false" autocorrect="off"
+                                autocapitalize="off"
+                                placeholder="# start writing your python script here...&#10;# Ctrl+S = sync memory"></textarea>
+                        </div>
+                    </main>
+                </div>
+            </section>
 
-                 <section class="puzzle-path-screen hidden" id="screen-puzzle-select">
-                    <div class="menu-heading" style="font-size: 28px;">PUZZLES</div>
-                    <div class="menu-tagline">clear a level to advance the marker</div>
-                    <div class="puzzle-tracks" id="puzzle-tracks"></div>
-                    <button class="btn" data-action="back-to-menu">[ BACK ]</button>
-                 </section>
+            <section class="puzzle-path-screen hidden" id="screen-puzzle-select">
+                <div class="menu-heading" style="font-size: 28px;">PUZZLES</div>
+                <div class="menu-tagline">clear a level to advance the marker</div>
+                <div class="puzzle-meta" id="puzzle-meta"></div>
+                <div class="puzzle-tabs" id="puzzle-tabs"></div>
+                <div class="puzzle-tracks" id="puzzle-tracks"></div>
+                <button class="btn" data-action="back-to-menu">[ BACK ]</button>
+            </section>
 
-                <section class="hidden" id="screen-puzzles">
-                    <div class="game-body">
-                        <aside class="rules-panel" id="puzzles-rules-panel">
-                            <div class="rules-header">
-                                <span class="rules-title" id="puzzles-track-label">PUZZLES</span>
-                                <span id="puzzles-progress" class="rules-progress">LEVEL 1</span>
-                            </div>
-                            <p class="puzzles-prompt" id="puzzles-prompt"></p>
-                            <ul class="rules-list" id="puzzles-rules-list"></ul>
-                        </aside>
-                        <main class="editor-panel">
-                            <div class="editor-topbar">
-                                <span class="editor-label">script.py</span>
+            <section class="hidden" id="screen-puzzles">
+                <div class="game-body">
+                    <aside class="rules-panel" id="puzzles-rules-panel">
+                        <div class="rules-header">
+                            <span class="rules-title" id="puzzles-track-label">PUZZLES</span>
+                            <span id="puzzles-progress" class="rules-progress">LEVEL 1</span>
+                        </div>
+                        <p class="puzzles-prompt" id="puzzles-prompt"></p>
+                        <ul class="rules-list" id="puzzles-rules-list"></ul>
+                    </aside>
+                    <main class="editor-panel">
+                        <div class="editor-topbar">
+                            <span class="editor-label">script.py</span>
+                            <span class="save-section">
+                                <button id="puzzles-hint-btn" class="btn small">HINT</button>
                                 <button id="puzzles-back-btn" class="btn small">[ BACK TO PATH ]</button>
-                            </div>
-                            <div class="puzzles-given" id="puzzles-given"></div>
-                            <div class="editor-container">
-                                <div id="puzzles-line-numbers" class="line-numbers">1</div>
-                                <textarea id="debug-editor" class="code-editor" spellcheck="false" autocorrect="off" autocapitalize="off" placeholder="# write your fix here..."></textarea>
-                            </div>
-                        </main>
-                    </div>
-                </section>
+                            </span>
+                        </div>
+                        <div class="puzzles-given" id="puzzles-given"></div>
+                        <div class="editor-container">
+                            <div id="puzzles-line-numbers" class="line-numbers">1</div>
+                            <textarea id="debug-editor" class="code-editor" spellcheck="false" autocorrect="off"
+                                autocapitalize="off" placeholder="# write your fix here..."></textarea>
+                        </div>
+                        <div class="puzzles-console" id="puzzles-console"></div>
+                        <div class="puzzle-solved hidden" id="puzzle-solved">
+                            <span class="ps-text" id="puzzle-solved-text"></span>
+                            <span class="ps-actions">
+                                <button class="btn small primary" id="puzzle-next-btn">[ NEXT LEVEL ]</button>
+                                <button class="btn small" id="puzzle-path-btn">[ PATH ]</button>
+                            </span>
+                        </div>
+                    </main>
+                </div>
+            </section>
+        </div>
+    </div>
 
-                </div>
-        </div>
-        <!--success screen-->
-        <div id="success-screen" class="success-screen hidden">
-            <div class="success-inner">
-                <div class="success-blink">•‿•</div>
-                <h1 class="success-title">TASK CLEARED</h1>
-                <div class="success-divider"></div>
-                <p class="success-label">SUCCESS</p>
-                <div class="success-stats">
-                    <div><b id="stat-time">00:00</b> TIME</div>
-                    <div><b id="stat-streak">0</b> WIN STREAK</div>
-                    <div><b id="stat-diff">EASY</b> DIFFICULTY</div>
-                </div>
-                <p class="success-msg" id="success-msg">Rules satisfied. The script compiles.</p>
-                <div class="success-actions">
-                    <button class="btn primary" id="next-task-btn">[ NEXT TASK ]</button>
-                    <button class="btn" data-action="back-to-menu">[ MAIN MENU ]</button>
-                </div>
+    <!--success screen-->
+    <div id="success-screen" class="success-screen hidden">
+        <div class="success-inner">
+            <div class="success-blink">•‿•</div>
+            <h1 class="success-title">TASK CLEARED</h1>
+            <div class="success-divider"></div>
+            <p class="success-label">SUCCESS</p>
+            <div class="success-stats">
+                <div><b id="stat-time">00:00</b> TIME</div>
+                <div><b id="stat-streak">0</b> WIN STREAK</div>
+                <div><b id="stat-diff">EASY</b> DIFFICULTY</div>
+            </div>
+            <p class="success-msg" id="success-msg">Rules satisfied. The script compiles.</p>
+            <div class="success-actions">
+                <button class="btn primary" id="next-task-btn">[ NEXT TASK ]</button>
+                <button class="btn primary hidden" id="daily-share-btn">[ COPY RESULT ]</button>
+                <button class="btn" data-action="back-to-menu">[ MAIN MENU ]</button>
             </div>
         </div>
-        <!--first visit tut-->
-        <div id="tutorial-prompt" class="modal-backdrop hidden">
-            <div class="modal-box">
-                <h2>FIRST TIME HERE?</h2>
-                <p>Take a 60-second walkthrough of the interface, or jump straight in — you can replay this anytime from "HOW TO PLAY".</p>
-                <div class="modal-actions">
-                    <button class="btn primary" id="start-tutorial-btn">[ PLAY TUTORIAL ]</button>
-                    <button class="btn" id="skip-tutorial-btn">[ SKIP ]</button>
-                </div>
-            </div>
-        </div>
-        <!--first visit nickname p-->
-        <div id="nickname-prompt" class="modal-backdrop hidden">
-            <div class="modal-box">
-                <h2>PICK A CALLSIGN</h2>
-                <p>This is your public name on the leaderboard. Keep it clean — it's checked before it's saved.</p>
-                <input class="lobby-input" id="nickname-input" maxlength="16" placeholder="e.g. DUCK_LORD" />
-                <div class="error-text" id="nickname-error"></div>
-                <div class="modal-actions">
-                    <button class="btn primary" id="confirm-nickname-btn">[ CONFIRM ]</button>
-                </div>
-            </div>
-        </div>
-        <!--tut spotlight overlay-->
-        <div id="tutorial-overlay" class="tutorial-overlay hidden"></div>
+    </div>
 
-        <!-- theme picker-->
-        <div id="theme-prompt" class="modal-backdrop hidden">
-            <div class="modal-box theme-box">
-                <h2>THEME</h2>
-                <p>Pick a preset or customize your own colors. Saved on this device.</p>
+    <!--first visit tut-->
+    <div id="tutorial-prompt" class="modal-backdrop hidden">
+        <div class="modal-box">
+            <h2>FIRST TIME HERE?</h2>
+            <p>Take a 60-second walkthrough of the interface, or jump straight in — you can replay this anytime from
+                "HOW TO PLAY".</p>
+            <div class="modal-actions">
+                <button class="btn primary" id="start-tutorial-btn">[ PLAY TUTORIAL ]</button>
+                <button class="btn" id="skip-tutorial-btn">[ SKIP ]</button>
+            </div>
+        </div>
+    </div>
+
+    <!--first visit nickname p-->
+    <div id="nickname-prompt" class="modal-backdrop hidden">
+        <div class="modal-box">
+            <h2>PICK A CALLSIGN</h2>
+            <p>This is your public name on the leaderboard. Keep it clean — it's checked before it's saved.</p>
+            <input class="lobby-input" id="nickname-input" maxlength="16" placeholder="e.g. DUCK_LORD" />
+            <div class="error-text" id="nickname-error"></div>
+            <div class="modal-actions">
+                <button class="btn primary" id="confirm-nickname-btn">[ CONFIRM ]</button>
+            </div>
+        </div>
+    </div>
+
+    <!--tut spotlight overlay-->
+    <div id="tutorial-overlay" class="tutorial-overlay hidden"></div>
+
+    <!-- keyboard shortcuts sheet (opened with ? or the ? button) -->
+    <div id="keys-prompt" class="modal-backdrop hidden">
+        <div class="modal-box keys-box">
+            <h2>KEYBOARD</h2>
+            <div class="keys-grid">
+                <div class="keys-group">EVERYWHERE</div>
+                <div class="keys-row"><kbd>ESC</kbd><span>go back / close a popup</span></div>
+                <div class="keys-row"><kbd>?</kbd><span>this sheet</span></div>
+                <div class="keys-row"><kbd>S</kbd><span>settings</span></div>
+                <div class="keys-row"><kbd>M</kbd><span>sound on / off</span></div>
+                <div class="keys-group">MENU</div>
+                <div class="keys-row"><kbd>↑</kbd><kbd>↓</kbd><kbd>ENTER</kbd><span>move and select</span></div>
+                <div class="keys-row"><kbd>1</kbd>–<kbd>5</kbd><span>jump to a mode</span></div>
+                <div class="keys-row"><kbd>D</kbd><span>play the daily challenge (menu)</span></div>
+                <div class="keys-group">PICKING A DIFFICULTY</div>
+                <div class="keys-row"><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd><span>easy / medium / hard</span></div>
+                <div class="keys-group">LEADERBOARD</div>
+                <div class="keys-row"><kbd>←</kbd><kbd>→</kbd><span>switch tab</span></div>
+                <div class="keys-group">IN A GAME</div>
+                <div class="keys-row"><kbd>CTRL</kbd>+<kbd>S</kbd><span>sync memory</span></div>
+                <div class="keys-row"><kbd>ENTER</kbd><span>next task (on the result screen)</span></div>
+                <div class="keys-group">PUZZLES</div>
+                <div class="keys-row"><kbd>ALT</kbd>+<kbd>H</kbd><span>hint</span></div>
+                <div class="keys-row"><kbd>ENTER</kbd><span>next level (after clearing one)</span></div>
+            </div>
+            <div class="modal-actions">
+                <button class="btn primary" id="keys-close-btn">[ GOT IT ]</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- asks before leaving a run in progress -->
+    <div id="confirm-prompt" class="modal-backdrop hidden">
+        <div class="modal-box">
+            <h2>LEAVE THIS RUN?</h2>
+            <p id="confirm-text">Your current task will be lost.</p>
+            <div class="modal-actions">
+                <button class="btn primary" id="confirm-no">[ STAY ]</button>
+                <button class="btn danger" id="confirm-yes">[ LEAVE ] <kbd>Y</kbd></button>
+            </div>
+        </div>
+    </div>
+
+    <!-- profile picture picker-->
+    <div id="profile-prompt" class="modal-backdrop hidden">
+        <div class="modal-box profile-box">
+            <h2>PROFILE PICTURE</h2>
+            <p>Win games and clear puzzles to unlock more. Everyone can see the one you pick.</p>
+            <div class="avatar-grid" id="avatar-grid"></div>
+            <div class="modal-actions">
+                <button class="btn primary" id="profile-close-btn">[ DONE ]</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="toast" class="toast hidden" role="status"></div>
+
+    <!-- settings popup: opened with the SETTINGS button or the S key -->
+    <div id="settings-prompt" class="modal-backdrop hidden">
+        <div class="modal-box settings-box" role="dialog" aria-labelledby="settings-title">
+            <h2 id="settings-title">SETTINGS</h2>
+            <div class="set-tabs" id="set-tabs">
+                <button class="set-tab active" data-tab="general">GENERAL</button>
+                <button class="set-tab" data-tab="theme">THEME</button>
+                <button class="set-tab" data-tab="feedback">FEEDBACK</button>
+                <button class="set-tab" data-tab="about">ABOUT</button>
+            </div>
+
+            <div class="set-pane" data-pane="general">
+                <div class="set-title">SOUND</div>
+                <div class="set-row"><span>Sound effects <kbd>M</kbd></span><button class="btn small"
+                        id="settings-sound-btn" aria-pressed="true">ON</button></div>
+                <div class="set-row"><span>Volume</span><input type="range" id="settings-volume" min="0" max="100"
+                        step="5" aria-label="Volume"></div>
+                <div class="set-title">SCREEN</div>
+                <div class="set-row"><span>CRT scanlines &amp; grain</span><button class="btn small"
+                        id="settings-fx-btn" aria-pressed="true">ON</button></div>
+                <div class="set-title">ACCOUNT &amp; CLOUD SAVE</div>
+                <p class="save-text" id="save-status">Checking...</p>
+                <button class="btn small primary hidden" id="save-link-btn">[ LINK GOOGLE ACCOUNT ]</button>
+                <div class="set-title">KEYBOARD</div>
+                <div class="set-row"><span>Key hints on buttons</span><button class="btn small"
+                        id="settings-keyhints-btn" aria-pressed="true">ON</button></div>
+                <div class="set-row"><span>Shortcuts <kbd>?</kbd></span><button class="btn small"
+                        id="settings-keys-btn">SHOW</button></div>
+            </div>
+
+            <div class="set-pane hidden" data-pane="theme">
+                <p class="set-note">Pick a base theme, then tweak the colors if you like. Saved on this device.</p>
                 <div class="theme-presets" id="theme-presets"></div>
                 <div class="theme-swatches" id="theme-swatches"></div>
-                <div class="modal-actions">
-                    <button class="btn" id="theme-reset-btn">[ RESET ]</button>
-                    <button class="btn primary" id="theme-close-btn">[ DONE ]</button>
+                <button class="btn small" id="theme-reset-btn">[ RESET COLORS ]</button>
+            </div>
+
+            <div class="set-pane hidden" data-pane="feedback">
+                <p class="set-note">Found a bug, or have an idea? It goes straight to the developer.</p>
+                <div class="fb-kinds" id="fb-kinds">
+                    <button class="btn small active" data-kind="idea">IDEA</button>
+                    <button class="btn small" data-kind="bug">BUG</button>
+                    <button class="btn small" data-kind="other">OTHER</button>
                 </div>
+                <textarea id="fb-message" class="lobby-input fb-text" maxlength="1000" rows="5"
+                    placeholder="What's on your mind?"></textarea>
+                <input id="fb-contact" class="lobby-input" maxlength="100"
+                    placeholder="Email or @handle (optional, only if you want a reply)" autocomplete="off" />
+                <input type="text" id="fb-website" class="fb-hp" tabindex="-1" autocomplete="off" aria-hidden="true" />
+                <div class="fb-foot">
+                    <span class="fb-count" id="fb-count">0 / 1000</span>
+                    <button class="btn small primary" id="fb-send-btn">[ SEND ]</button>
+                </div>
+                <div class="fb-status" id="fb-status" role="status"></div>
+            </div>
+
+            <div class="set-pane hidden" data-pane="about">
+                <div class="set-row"><span>Source code</span><a class="btn small" id="settings-source"
+                        href="https://github.com/jamallyemin/Debugr.fun" target="_blank" rel="noopener">GITHUB</a></div>
+                <p class="set-note" id="settings-about"></p>
+            </div>
+
+            <div class="modal-actions" style="margin-top: 16px;">
+                <button class="btn primary" id="settings-close-btn">[ DONE ]</button>
             </div>
         </div>
-        <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
-        <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
-        <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
-        <script src="taskEngine.js"></script>
-        <script src="parser.js"></script>
-        <script src="config.js"></script>
-        <script src="firebaseclient.js"></script>
-        <script src="tutorial.js"></script>
-        <script src="puzzles.js"></script>
-        <script src="theme.js"></script>
-        <script src="script.js"></script>
-    </body>
+    </div>
+
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+    <script src="taskEngine.js"></script>
+    <script src="parser.js"></script>
+    <script src="config.js"></script>
+    <script src="firebaseclient.js"></script>
+    <script src="tutorial.js"></script>
+    <script src="pyeval.js"></script>
+    <script src="puzzles.js"></script>
+    <script src="rewards.js"></script>
+    <script src="theme.js"></script>
+    <script src="sounds.js"></script>
+    <script src="script.js"></script>
+    <script src="keys.js"></script>
+    <script src="settings.js"></script>
+    <script src="feedback.js"></script>
+    <script src="cloudsave.js"></script>
+    <script src="daily.js"></script>
+    <script src="keycaps.js"></script>
+</body>
+
 </html>

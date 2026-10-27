@@ -5,6 +5,10 @@ service cloud.firestore {
 
     function isSignedIn() { return request.auth != null; }
     function isOwner(uid) { return isSignedIn() && request.auth.uid == uid; }
+    // avatar ids must match the ids in rewards.js (add new ones here too)
+    function validAvatar(d) {
+      return !('avatar' in d) || d.avatar in ['bug', 'cat', 'fox', 'owl', 'snake'];
+    }
     function validNickname(name) {
       return name is string && name.size() >= 3 && name.size() <= 16
         && name.matches('^[A-Za-z0-9_-]+$');
@@ -12,7 +16,7 @@ service cloud.firestore {
 
     match /players/{uid} {
       allow read: if true;
-      allow write: if isOwner(uid) && validNickname(request.resource.data.nickname);
+      allow write: if isOwner(uid) && validNickname(request.resource.data.nickname) && validAvatar(request.resource.data);
     }
 
     match /nicknames/{lower} {
@@ -39,7 +43,92 @@ service cloud.firestore {
 
     match /streaks/{uid} {
       allow read: if true;
-      allow write: if isOwner(uid);
+      allow write: if isOwner(uid) && validAvatar(request.resource.data);
+    }
+
+    // puzzle rankings: one counter per player per day / week, +1 at a time
+    match /puzzleDaily/{id} {
+      allow read: if true;
+      allow create: if isSignedIn()
+        && request.resource.data.uid == request.auth.uid
+        && id == request.auth.uid + '_' + request.resource.data.date
+        && validNickname(request.resource.data.nickname)
+        && validAvatar(request.resource.data)
+        && request.resource.data.solved == 1;
+      allow update: if isSignedIn()
+        && resource.data.uid == request.auth.uid
+        && request.resource.data.uid == resource.data.uid
+        && request.resource.data.date == resource.data.date
+        && validNickname(request.resource.data.nickname)
+        && validAvatar(request.resource.data)
+        && request.resource.data.solved == resource.data.solved + 1;
+      allow delete: if false;
+    }
+
+    match /puzzleWeekly/{id} {
+      allow read: if true;
+      allow create: if isSignedIn()
+        && request.resource.data.uid == request.auth.uid
+        && id == request.auth.uid + '_' + request.resource.data.week
+        && validNickname(request.resource.data.nickname)
+        && validAvatar(request.resource.data)
+        && request.resource.data.solved == 1;
+      allow update: if isSignedIn()
+        && resource.data.uid == request.auth.uid
+        && request.resource.data.uid == resource.data.uid
+        && request.resource.data.week == resource.data.week
+        && validNickname(request.resource.data.nickname)
+        && validAvatar(request.resource.data)
+        && request.resource.data.solved == resource.data.solved + 1;
+      allow delete: if false;
+    }
+
+    // feedback: players can only add messages. Nobody can read them from the app: open the Firebase console to read them.
+    match /feedback/{id} {
+      allow read: if false;
+      allow create: if isSignedIn()
+        && request.resource.data.keys().hasOnly(['uid', 'nickname', 'kind', 'message', 'contact', 'version', 'screen', 'createdAt'])
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.kind in ['idea', 'bug', 'other']
+        && request.resource.data.message is string
+        && request.resource.data.message.size() >= 5
+        && request.resource.data.message.size() <= 1000
+        && (!('contact' in request.resource.data) || (request.resource.data.contact is string && request.resource.data.contact.size() <= 100))
+        && (!('nickname' in request.resource.data) || validNickname(request.resource.data.nickname))
+        && request.resource.data.version is string && request.resource.data.version.size() <= 20
+        && request.resource.data.screen is string && request.resource.data.screen.size() <= 20
+        && request.resource.data.createdAt == request.time;
+      allow update, delete: if false;
+    }
+
+    // daily challenge: one score per player per day, can't be changed afterwards
+    match /dailyScores/{id} {
+      allow read: if true;
+      allow create: if isSignedIn()
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.date is string
+        && request.resource.data.date.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+        && id == request.auth.uid + '_' + request.resource.data.date
+        && validNickname(request.resource.data.nickname)
+        && validAvatar(request.resource.data)
+        && request.resource.data.difficulty in ['medium', 'hard']
+        && request.resource.data.elapsedMs is number
+        && request.resource.data.elapsedMs > 200
+        && request.resource.data.elapsedMs < 600000;
+      allow update, delete: if false;
+    }
+
+    // cloud save: private to its owner
+    function validSave(d) {
+      return d.keys().hasOnly(['puzzle', 'stats', 'avatar', 'puzzleStreak', 'nickname', 'updatedAt'])
+        && d.puzzle is map && d.puzzle.size() <= 10
+        && d.stats is map && d.stats.size() <= 10
+        && validAvatar(d)
+        && (!('nickname' in d) || validNickname(d.nickname));
+    }
+    match /saves/{uid} {
+      allow read: if isOwner(uid);
+      allow write: if isOwner(uid) && validSave(request.resource.data);
     }
 
     match /rooms/{code} {
@@ -56,8 +145,8 @@ service cloud.firestore {
 
       match /players/{uid} {
         allow read: if true;
-        allow create: if isOwner(uid) && validNickname(request.resource.data.nickname);
-        allow update: if isOwner(uid);
+        allow create: if isOwner(uid) && validNickname(request.resource.data.nickname) && validAvatar(request.resource.data);
+        allow update: if isOwner(uid) && validAvatar(request.resource.data);
         allow delete: if isOwner(uid)
           || get(/databases/$(database)/documents/rooms/$(code)).data.hostUid == request.auth.uid;
       }

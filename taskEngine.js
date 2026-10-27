@@ -24,9 +24,9 @@
   }
 
   const DIFFICULTY = {
-    easy:   { varNames: 2, numbers: 1, strings: 1, list: 0, ruleCount: 1 },
+    easy: { varNames: 2, numbers: 1, strings: 1, list: 0, ruleCount: 1 },
     medium: { varNames: 3, numbers: 2, strings: 1, list: 1, ruleCount: 3 },
-    hard:   { varNames: 5, numbers: 2, strings: 2, list: 1, ruleCount: 5 },
+    hard: { varNames: 5, numbers: 2, strings: 2, list: 1, ruleCount: 5 },
   };
 
   function buildReferenceSolution(diff) {
@@ -136,7 +136,8 @@
   }
   const history = { easy: new Set(), medium: new Set(), hard: new Set() };
 
-  function generateTask(difficulty) {
+  // seeded = true skips the history so the daily gets the same task for everyone
+  function generateTask(difficulty, seeded) {
     const diff = DIFFICULTY[difficulty] ? difficulty : "easy";
     const cfg = DIFFICULTY[diff];
 
@@ -150,10 +151,12 @@
       keys = uniqueSample(pool, Math.min(cfg.ruleCount, pool.length));
       signature = keys.slice().sort().join("|");
       attempts++;
-    } while (history[diff].has(signature) && attempts < 25);
+    } while (!seeded && history[diff].has(signature) && attempts < 25);
 
-    history[diff].add(signature);
-    if (history[diff].size > 500) history[diff].clear();
+    if (!seeded) {
+      history[diff].add(signature);
+      if (history[diff].size > 500) history[diff].clear();
+    }
 
     const rules = [];
     for (const k of keys) rules.push(buildRule(k, RULE_DEFS[k].paramsFromSolution(sol)));

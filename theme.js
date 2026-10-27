@@ -16,8 +16,14 @@ const Theme = (() => {
     { key: "--red", label: "Fail (false)" },
   ];
 
+<<<<<<< HEAD
   let state = { base: "dark", custom: {} };
 
+=======
+  let state = {base: "dark", custom: {}};
+
+  
+>>>>>>> ab7be50 (update everything: daily, puzzles, avatars, cloud save, key badges, README)
   // storage
   function load() {
     try {
@@ -29,12 +35,22 @@ const Theme = (() => {
       } else {
         state.custom = Object.fromEntries(Object.entries(raw).filter(([k]) => VARS.includes(k)));
       }
+<<<<<<< HEAD
     } catch { /* ignore broken saved data */ }
   }
   function save() {
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch { /* storage blocked */ }
   }
 
+=======
+    } catch {}
+  }
+  function save() {
+    try {localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch {}
+  }
+
+  // applying
+>>>>>>> ab7be50 (update everything: daily, puzzles, avatars, cloud save, key badges, README)
   function apply() {
     const root = document.documentElement;
     root.setAttribute("data-theme", state.base);
@@ -49,6 +65,11 @@ const Theme = (() => {
     for (const k of VARS) out[k] = cs.getPropertyValue(k).trim();
     return out;
   }
+<<<<<<< HEAD
+=======
+
+  // color math so custom themes stay readable
+>>>>>>> ab7be50 (update everything: daily, puzzles, avatars, cloud save, key badges, README)
   function toHex(color) {
     if (!color) return "#000000";
     if (color.startsWith("#")) {
@@ -71,9 +92,16 @@ const Theme = (() => {
     return 0.2126 * r + 0.7152 * g + 0.0722 * b;
   }
 
+<<<<<<< HEAD
   function setColor(key, value) {
     state.custom[key] = value;
     const cur = { ...currentVars(), ...state.custom };
+=======
+  // change one color, and derive the colors that depend on it
+  function setColor(key, value) {
+    state.custom[key] = value;
+    const cur = {...currentVars(), ...state.custom };
+>>>>>>> ab7be50 (update everything: daily, puzzles, avatars, cloud save, key badges, README)
     if (key === "--bg" || key === "--text") {
       state.custom["--bg2"] = mix(cur["--bg"], cur["--text"], 0.05);
       state.custom["--bg3"] = mix(cur["--bg"], cur["--text"], 0.09);
@@ -82,14 +110,22 @@ const Theme = (() => {
       state.custom["--text-muted"] = mix(cur["--text"], cur["--bg"], 0.7);
     }
     if (key === "--green" || key === "--red") {
+<<<<<<< HEAD
       // text drawn on top of a filled green/red button
+=======
+      // text drawn on top of a filled green /red button
+>>>>>>> ab7be50 (update everything: daily, puzzles, avatars, cloud save, key badges, README)
       state.custom["--on-accent"] = luminance(cur["--green"]) > 0.45 ? "#0d0d0d" : "#ffffff";
     }
     apply();
     save();
   }
 
+<<<<<<< HEAD
 
+=======
+  // popup UI
+>>>>>>> ab7be50 (update everything: daily, puzzles, avatars, cloud save, key badges, README)
   function renderPresets() {
     const wrap = document.getElementById("theme-presets");
     wrap.innerHTML = PRESETS.map((p) =>
@@ -120,17 +156,23 @@ const Theme = (() => {
     renderSwatches();
   }
 
+<<<<<<< HEAD
   document.getElementById("theme-btn").addEventListener("click", () => {
+=======
+  function render() {
+>>>>>>> ab7be50 (update everything: daily, puzzles, avatars, cloud save, key badges, README)
     renderPresets();
     renderSwatches();
-    document.getElementById("theme-prompt").classList.remove("hidden");
-  });
-  document.getElementById("theme-close-btn").addEventListener("click", () => {
-    document.getElementById("theme-prompt").classList.add("hidden");
-  });
+  }
+
   document.getElementById("theme-reset-btn").addEventListener("click", reset);
 
   load();
   apply();
+<<<<<<< HEAD
   return {};
 })();
+=======
+  return { render };
+})();
+>>>>>>> ab7be50 (update everything: daily, puzzles, avatars, cloud save, key badges, README)
