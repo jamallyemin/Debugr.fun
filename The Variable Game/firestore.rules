@@ -1,0 +1,439 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() { return request.auth != null; }
+    function isOwner(uid) { return isSignedIn() && request.auth.uid == uid; }
+    // avatar ids must match the ids in rewards.js (add new ones here too)
+    function validAvatar(d) {
+      return !('avatar' in d) || d.avatar in ['bug', 'cat', 'fox', 'owl', 'snake'];
+    }
+    function validNickname(name) {
+      return name is string && name.size() >= 3 && name.size() <= 16
+        && name.matches('^[A-Za-z0-9_-]+$');
+    }
+
+    // a race task is only ever rule keys + params (no text, no solution); the client re-validates it
+    // against its own rule library before showing it, these checks just stop junk and oversized data
+    function validRule(r) {
+      return r is map && r.keys().hasOnly(['key', 'params'])
+        && r.key is string && r.key.size() <= 24
+        && r.params is map && r.params.size() <= 4;
+    }
+    function ruleOk(rules, i) { return rules.size() <= i || validRule(rules[i]); }
+    function validTask(t) {
+      return t is map && t.keys().hasOnly(['id', 'difficulty', 'rules'])
+        && t.id is string && t.id.size() <= 40
+        && t.difficulty in ['easy', 'medium', 'hard']
+        && t.rules is list && t.rules.size() >= 1 && t.rules.size() <= 8
+        && ruleOk(t.rules, 0) && ruleOk(t.rules, 1) && ruleOk(t.rules, 2) && ruleOk(t.rules, 3)
+        && ruleOk(t.rules, 4) && ruleOk(t.rules, 5) && ruleOk(t.rules, 6) && ruleOk(t.rules, 7);
+    }
+
+    match /players/{uid} {
+      allow read: if true;
+      allow write: if isOwner(uid) && validNickname(request.resource.data.nickname) && validAvatar(request.resource.data)
+        && (!('showcase' in request.resource.data) || (request.resource.data.showcase is string && request.resource.data.showcase.size() <= 40));
+    }
+
+    match /nicknames/{lower} {
+      allow read: if true;
+      allow create: if isSignedIn()
+        && request.resource.data.uid == request.auth.uid
+        && lower == lower.lower()
+        && validNickname(lower)
+        && !exists(/databases/$(database)/documents/nicknames/$(lower));
+      allow update: if isOwner(resource.data.uid);
+      allow delete: if false;
+    }
+
+    match /scores/{id} {
+      allow read: if true;
+      allow create: if isSignedIn()
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.keys().hasOnly(['uid', 'nickname', 'difficulty', 'elapsedMs', 'createdAt'])
+        && validNickname(request.resource.data.nickname)
+        && request.resource.data.difficulty in ['easy', 'medium', 'hard']
+        && request.resource.data.elapsedMs is int
+        && request.resource.data.elapsedMs > 500
+        && request.resource.data.elapsedMs < 600000
+        && request.resource.data.createdAt == request.time;
+      allow update, delete: if false; // leaderboard history is append-only
+    }
+
+    match /streaks/{uid} {
+      allow read: if true;
+      allow write: if isOwner(uid) && validAvatar(request.resource.data)
+        && request.resource.data.keys().hasOnly(['nickname', 'dailyStreak', 'winStreak', 'lastPlayDate', 'avatar', 'updatedAt'])
+        && validNickname(request.resource.data.nickname)
+        && request.resource.data.dailyStreak is int && request.resource.data.dailyStreak >= 0 && request.resource.data.dailyStreak <= 3700
+        && request.resource.data.winStreak is int && request.resource.data.winStreak >= 0 && request.resource.data.winStreak <= 100000
+        && request.resource.data.lastPlayDate is string && request.resource.data.lastPlayDate.size() == 10
+        && request.resource.data.updatedAt == request.time;
+    }
+
+    // puzzle rankings: one counter per player per day / week, +1 at a time
+    match /puzzleDaily/{id} {
+      allow read: if true;
+      allow create: if isSignedIn()
+        && request.resource.data.uid == request.auth.uid
+        && id == request.auth.uid + '_' + request.resource.data.date
+        && validNickname(request.resource.data.nickname)
+        && validAvatar(request.resource.data)
+        && request.resource.data.solved == 1;
+      allow update: if isSignedIn()
+        && resource.data.uid == request.auth.uid
+        && request.resource.data.uid == resource.data.uid
+        && request.resource.data.date == resource.data.date
+        && validNickname(request.resource.data.nickname)
+        && validAvatar(request.resource.data)
+        && request.resource.data.solved == resource.data.solved + 1;
+      allow delete: if false;
+    }
+
+    match /puzzleWeekly/{id} {
+      allow read: if true;
+      allow create: if isSignedIn()
+        && request.resource.data.uid == request.auth.uid
+        && id == request.auth.uid + '_' + request.resource.data.week
+        && validNickname(request.resource.data.nickname)
+        && validAvatar(request.resource.data)
+        && request.resource.data.solved == 1;
+      allow update: if isSignedIn()
+        && resource.data.uid == request.auth.uid
+        && request.resource.data.uid == resource.data.uid
+        && request.resource.data.week == resource.data.week
+        && validNickname(request.resource.data.nickname)
+        && validAvatar(request.resource.data)
+        && request.resource.data.solved == resource.data.solved + 1;
+      allow delete: if false;
+    }
+
+    // feedback: players can only add messages. Nobody can read them from the app: open the Firebase console to read them.
+    match /feedback/{id} {
+      allow read: if false;
+      allow create: if isSignedIn()
+        && request.resource.data.keys().hasOnly(['uid', 'nickname', 'kind', 'message', 'contact', 'version', 'screen', 'tech', 'createdAt'])
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.kind in ['idea', 'bug', 'other']
+        && request.resource.data.message is string
+        && request.resource.data.message.size() >= 5
+        && request.resource.data.message.size() <= 1000
+        && (!('contact' in request.resource.data) || (request.resource.data.contact is string && request.resource.data.contact.size() <= 100))
+        && (!('nickname' in request.resource.data) || validNickname(request.resource.data.nickname))
+        && request.resource.data.version is string && request.resource.data.version.size() <= 20
+        && request.resource.data.screen is string && request.resource.data.screen.size() <= 20
+        && (!('tech' in request.resource.data) || (request.resource.data.tech is string && request.resource.data.tech.size() <= 600))
+        && request.resource.data.createdAt == request.time;
+      allow update, delete: if false;
+    }
+
+    // daily challenge: one score per player per day, can't be changed afterwards
+    match /dailyScores/{id} {
+      allow read: if true;
+      allow create: if isSignedIn()
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.date is string
+        && request.resource.data.date.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+        && id == request.auth.uid + '_' + request.resource.data.date
+        && validNickname(request.resource.data.nickname)
+        && validAvatar(request.resource.data)
+        && request.resource.data.keys().hasOnly(['uid', 'nickname', 'avatar', 'date', 'difficulty', 'elapsedMs', 'createdAt'])
+        && request.resource.data.difficulty in ['medium', 'hard']
+        && request.resource.data.elapsedMs is int
+        && request.resource.data.elapsedMs > 500
+        && request.resource.data.elapsedMs < 600000
+        && request.resource.data.createdAt == request.time;
+      allow update, delete: if false;
+    }
+
+    // ---- ratings and the leaderboard ----
+    // One small document per player (ratings/{uid}). Everything the leaderboard shows comes from it, so a board is
+    // one sorted query. Each write may only move things one game at a time:
+    //  - at most one game per write, a rating step of at most 70
+    //  - wins can't rise by more than the games played, best times only ever go down (and stay above 1.2s)
+    //  - "dayGain" counts positive rating changes today and is capped at 150, so grinding has a daily ceiling
+    //  - boardBug / boardPuz (the fields the rating boards sort by) only exist for players with a linked Google
+    //    account (the sign-in token then has an email) who finished their 10 placement games
+    // This stops casual tampering. It can't prove a result really happened: that would need a server (Cloud Function).
+    function todayStr() {
+      return string(request.time.year()) + '-' + string(request.time.month()) + '-' + string(request.time.day());
+    }
+    function isLinked() { return 'email' in request.auth.token; }
+    function pos(n) { return n > 0 ? n : 0; }
+    function intIn(v, lo, hi) { return v is int && v >= lo && v <= hi; }
+    function ratingFieldsOk(d) {
+      return d.keys().hasOnly(['nickname', 'avatar', 'bugRating', 'bugGames', 'bugPeak', 'puzRating', 'puzGames', 'puzPeak',
+          'bestStreak', 'day', 'dayGain', 'wins_easy', 'wins_medium', 'wins_hard', 'best_easy', 'best_medium', 'best_hard',
+          'boardBug', 'boardPuz', 'updatedAt'])
+        && d.keys().hasAll(['nickname', 'avatar', 'bugRating', 'bugGames', 'bugPeak', 'puzRating', 'puzGames', 'puzPeak',
+          'bestStreak', 'day', 'dayGain', 'wins_easy', 'wins_medium', 'wins_hard', 'updatedAt']);
+    }
+    function boardOk(n) {
+      return (!('boardBug' in n) || (isLinked() && n.bugGames >= 10 && n.boardBug == n.bugRating))
+        && (!('boardPuz' in n) || (isLinked() && n.puzGames >= 10 && n.boardPuz == n.puzRating));
+    }
+    function ratingCommon(n) {
+      return ratingFieldsOk(n) && validNickname(n.nickname) && validAvatar(n)
+        && intIn(n.bugRating, 100, 4000) && intIn(n.puzRating, 100, 4000)
+        && intIn(n.bugPeak, 100, 4000) && intIn(n.puzPeak, 100, 4000)
+        && intIn(n.bugGames, 0, 1000000) && intIn(n.puzGames, 0, 1000000)
+        && intIn(n.bestStreak, 0, 100000)
+        && intIn(n.wins_easy, 0, 1000000) && intIn(n.wins_medium, 0, 1000000) && intIn(n.wins_hard, 0, 1000000)
+        && n.day == todayStr() && intIn(n.dayGain, 0, 150)
+        && n.updatedAt == request.time
+        && boardOk(n);
+    }
+    function bestNew(n, f) { return !(f in n) || intIn(n[f], 1201, 600000); }
+    function bestStep(o, n, f) {
+      return (!(f in o) || (f in n)) && (!(f in n) || (intIn(n[f], 1201, 600000) && (!(f in o) || n[f] <= o[f])));
+    }
+    function kindStep(oR, nR, oG, nG) {
+      return nG >= oG && (nG == oG ? nR == oR : math.abs(nR - oR) <= 70);
+    }
+    function ratingStep(o, n) {
+      return ratingCommon(n)
+        && (n.bugGames - o.bugGames) + (n.puzGames - o.puzGames) <= 1
+        && kindStep(o.bugRating, n.bugRating, o.bugGames, n.bugGames)
+        && kindStep(o.puzRating, n.puzRating, o.puzGames, n.puzGames)
+        && n.bugPeak == (n.bugRating > o.bugPeak ? n.bugRating : o.bugPeak)
+        && n.puzPeak == (n.puzRating > o.puzPeak ? n.puzRating : o.puzPeak)
+        && n.wins_easy >= o.wins_easy && n.wins_medium >= o.wins_medium && n.wins_hard >= o.wins_hard
+        && (n.wins_easy - o.wins_easy) + (n.wins_medium - o.wins_medium) + (n.wins_hard - o.wins_hard) <= n.bugGames - o.bugGames
+        && n.bestStreak >= o.bestStreak && n.bestStreak <= o.bestStreak + 1
+        && bestStep(o, n, 'best_easy') && bestStep(o, n, 'best_medium') && bestStep(o, n, 'best_hard')
+        && n.dayGain == (o.day == todayStr() ? o.dayGain : 0) + pos(n.bugRating - o.bugRating) + pos(n.puzRating - o.puzRating);
+    }
+    match /ratings/{uid} {
+      allow read: if true;
+      // a new player starts at 1000 with no games. Wins carried over from old leaderboard scores are capped at 500 per level.
+      allow create: if isOwner(uid) && ratingCommon(request.resource.data)
+        && request.resource.data.bugRating == 1000 && request.resource.data.puzRating == 1000
+        && request.resource.data.bugPeak == 1000 && request.resource.data.puzPeak == 1000
+        && request.resource.data.bugGames == 0 && request.resource.data.puzGames == 0
+        && request.resource.data.dayGain == 0
+        && request.resource.data.wins_easy <= 500 && request.resource.data.wins_medium <= 500 && request.resource.data.wins_hard <= 500
+        && bestNew(request.resource.data, 'best_easy') && bestNew(request.resource.data, 'best_medium') && bestNew(request.resource.data, 'best_hard');
+      allow update: if isOwner(uid) && ratingStep(resource.data, request.resource.data);
+      allow delete: if false;
+    }
+
+    // rated quick match queue: only the Cloud Functions write here, a player may read their own entry to learn their room
+    match /queue/{uid} {
+      allow read: if isOwner(uid);
+      allow write: if false;
+    }
+
+    // cloud save: private to its owner
+    function validSave(d) {
+      return d.keys().hasOnly(['puzzle', 'stats', 'avatar', 'puzzleStreak', 'learn', 'nickname', 'updatedAt'])
+        && d.puzzle is map && d.puzzle.size() <= 10
+        && d.stats is map && d.stats.size() <= 10
+        && (!('learn' in d) || (d.learn is map && d.learn.size() <= 200))
+        && validAvatar(d)
+        && (!('nickname' in d) || validNickname(d.nickname));
+    }
+    match /saves/{uid} {
+      allow read: if isOwner(uid);
+      allow write: if isOwner(uid) && validSave(request.resource.data);
+    }
+
+    // ---- friends ----
+    function pairId(a, b) { return a < b ? a + '_' + b : b + '_' + a; }
+    match /friendCodes/{code} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && code.matches('^[A-HJ-NP-Z2-9]{6}$')
+        && request.resource.data.keys().hasOnly(['uid', 'createdAt'])
+        && request.resource.data.uid == request.auth.uid;
+      allow update, delete: if false;
+    }
+    // id is "<to>_<from>"; only the sender can create it, either side can remove it
+    match /friendReqs/{id} {
+      allow read: if isSignedIn() && (resource.data.to == request.auth.uid || resource.data.from == request.auth.uid);
+      allow create: if isSignedIn()
+        && request.resource.data.keys().hasOnly(['from', 'to', 'createdAt'])
+        && request.resource.data.from == request.auth.uid
+        && request.resource.data.to is string && request.resource.data.to != request.auth.uid
+        && id == request.resource.data.to + '_' + request.auth.uid;
+      allow update: if false;
+      allow delete: if isSignedIn() && (resource.data.to == request.auth.uid || resource.data.from == request.auth.uid);
+    }
+    // created by the person who ACCEPTS, and only while the other person's request still exists
+    match /friendships/{id} {
+      allow read: if isSignedIn() && request.auth.uid in resource.data.users;
+      allow create: if isSignedIn()
+        && request.resource.data.keys().hasOnly(['users', 'createdAt'])
+        && request.resource.data.users is list && request.resource.data.users.size() == 2
+        && request.resource.data.users[0] < request.resource.data.users[1]
+        && request.auth.uid in request.resource.data.users
+        && id == request.resource.data.users[0] + '_' + request.resource.data.users[1]
+        && exists(/databases/$(database)/documents/friendReqs/$(request.auth.uid + '_' + (request.resource.data.users[0] == request.auth.uid ? request.resource.data.users[1] : request.resource.data.users[0])));
+      allow update: if false;
+      allow delete: if isSignedIn() && request.auth.uid in resource.data.users;
+    }
+    // "come race me": one slot per person, written by a friend, read and cleared by the owner
+    match /invites/{toUid} {
+      allow read, delete: if isOwner(toUid);
+      allow create, update: if isSignedIn()
+        && request.resource.data.keys().hasOnly(['from', 'fromName', 'code', 'at'])
+        && request.resource.data.from == request.auth.uid
+        && validNickname(request.resource.data.fromName)
+        && request.resource.data.code is string && request.resource.data.code.matches('^[A-HJ-NP-Z2-9]{4}$')
+        && exists(/databases/$(database)/documents/friendships/$(pairId(request.auth.uid, toUid)));
+    }
+
+
+    // friend activity: one word and a time. Only the owner writes it; only the owner and their friends can read it.
+    match /presence/{uid} {
+      allow get: if isOwner(uid)
+        || (isSignedIn() && exists(/databases/$(database)/documents/friendships/$(pairId(request.auth.uid, uid))));
+      allow list: if false;
+      allow create, update: if isOwner(uid)
+        && request.resource.data.keys().hasOnly(['kind', 'at'])
+        && request.resource.data.kind in ['menu', 'solo', 'puzzles', 'daily', 'room', 'ranks', 'learn']
+        && request.resource.data.at == request.time;
+      allow delete: if isOwner(uid);
+    }
+
+    function roomPath(code) { return /databases/$(database)/documents/rooms/$(code); }
+    function validSettings(d) {
+      return d.difficulty in ['easy', 'medium', 'hard']
+        && d.rounds in [1, 3, 5]
+        && d.speed in ['normal', 'hungry', 'feral']
+        && d.sabotage is bool;
+    }
+    // one player's row in a room. only rule COUNTS and the finish are ever stored, never code
+    function validPlayer(d) {
+      return d.keys().hasOnly(['nickname', 'avatar', 'ready', 'passed', 'total', 'bites', 'done', 'elapsedMs', 'grid', 'round'])
+        && validNickname(d.nickname) && validAvatar(d)
+        && d.ready is bool
+        && d.passed is int && d.passed >= 0 && d.passed <= 8
+        && d.total is int && d.total >= 0 && d.total <= 8
+        && d.bites is int && d.bites >= 0 && d.bites <= 999
+        && d.done is bool
+        && d.round is int && d.round >= 0 && d.round <= 5
+        && (!('elapsedMs' in d) || (d.elapsedMs is int && d.elapsedMs > 500 && d.elapsedMs < 600000))
+        && (!('grid' in d) || (d.grid is string && d.grid.size() <= 16 && d.grid.matches('^[gar]*$')));
+    }
+
+    // ---- rooms ----
+    // phases: lobby -> race -> results -> race -> ... ; the host moves the room along, a player may only
+    // claim a finished round for themselves. Each player writes only their own player document.
+    function roomSettingsOk(d) {
+      return d.difficulty in ['easy', 'medium', 'hard']
+        && d.rounds in [1, 3, 5]
+        && d.speed in ['normal', 'hungry', 'feral']
+        && d.sabotage is bool;
+    }
+    function hostPlayerExists(code, hostUid) {
+      return exists(/databases/$(database)/documents/rooms/$(code)/players/$(hostUid));
+    }
+    function inRoom(code) {
+      return exists(/databases/$(database)/documents/rooms/$(code)/players/$(request.auth.uid));
+    }
+
+    match /rooms/{code} {
+      allow read: if true;
+      allow create: if isSignedIn()
+        && request.resource.data.keys().hasOnly(['difficulty', 'rounds', 'speed', 'sabotage', 'phase', 'round',
+             'roundWinners', 'hostUid', 'hostName', 'winnerUid', 'createdAt', 'expireAt'])
+        && roomSettingsOk(request.resource.data)
+        && request.resource.data.hostUid == request.auth.uid
+        && validNickname(request.resource.data.hostName)
+        && request.resource.data.phase == 'lobby'
+        && request.resource.data.round == 0
+        && request.resource.data.roundWinners == []
+        && request.resource.data.winnerUid == null
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.expireAt is timestamp
+        && request.resource.data.expireAt > request.time
+        && request.resource.data.expireAt < request.time + duration.value(2, 'd');
+
+      allow update: if isSignedIn() && (
+        // host: change settings while in the lobby
+        (resource.data.hostUid == request.auth.uid
+          && resource.data.phase == 'lobby'
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['difficulty', 'rounds', 'speed', 'sabotage'])
+          && roomSettingsOk(request.resource.data))
+        ||
+        // host: start the next round (from the lobby or from a results screen) with a well-formed task
+        (resource.data.hostUid == request.auth.uid
+          && resource.data.phase in ['lobby', 'results']
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['phase', 'round', 'task', 'startTime',
+               'winnerUid', 'winnerNickname', 'winnerElapsedMs'])
+          && request.resource.data.phase == 'race'
+          && request.resource.data.round == resource.data.round + 1
+          && request.resource.data.round <= resource.data.rounds
+          && validTask(request.resource.data.task)
+          && request.resource.data.task.difficulty == resource.data.difficulty
+          && request.resource.data.startTime == request.time
+          && request.resource.data.winnerUid == null
+          && request.resource.data.winnerNickname == ''
+          && request.resource.data.winnerElapsedMs == 0)
+        ||
+        // a player claims the round they just finished: only in this room, only while racing, only first
+        (resource.data.phase == 'race'
+          && resource.data.winnerUid == null
+          && inRoom(code)
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['phase', 'winnerUid', 'winnerNickname',
+               'winnerElapsedMs', 'roundWinners'])
+          && request.resource.data.phase == 'results'
+          && request.resource.data.winnerUid == request.auth.uid
+          && validNickname(request.resource.data.winnerNickname)
+          && request.resource.data.winnerElapsedMs is int
+          && request.resource.data.winnerElapsedMs > 500
+          && request.resource.data.winnerElapsedMs < 600000
+          && request.resource.data.roundWinners == resource.data.roundWinners.concat([request.auth.uid]))
+        ||
+        // host: rematch (same players, clean score)
+        (resource.data.hostUid == request.auth.uid
+          && resource.data.phase == 'results'
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['phase', 'round', 'roundWinners',
+               'winnerUid', 'winnerNickname', 'winnerElapsedMs'])
+          && request.resource.data.phase == 'lobby'
+          && request.resource.data.round == 0
+          && request.resource.data.roundWinners == []
+          && request.resource.data.winnerUid == null)
+        ||
+        // a player takes over as host, only when the host's player document is gone
+        (inRoom(code)
+          && !hostPlayerExists(code, resource.data.hostUid)
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['hostUid', 'hostName'])
+          && request.resource.data.hostUid == request.auth.uid
+          && validNickname(request.resource.data.hostName))
+      );
+      allow delete: if isSignedIn() && resource.data.hostUid == request.auth.uid;
+
+      function playerOk(d) {
+        return d.keys().hasOnly(['nickname', 'avatar', 'ready', 'passed', 'total', 'bites', 'done', 'elapsedMs', 'grid', 'round', 'seen', 'react', 'reactAt', 'say', 'sayAt'])
+          && (!('seen' in d) || (d.seen is timestamp && d.seen <= request.time))
+          && (!('react' in d) || (d.react in ['clap', 'fire', 'sweat', 'skull', 'bug'] && d.reactAt is timestamp && d.reactAt <= request.time))
+          && (!('say' in d) || (d.say in ['gg', 'wp', 'again', 'ready', 'wait', 'close'] && d.sayAt is timestamp && d.sayAt <= request.time))
+          && validNickname(d.nickname) && validAvatar(d)
+          && d.ready is bool
+          && d.passed is int && d.passed >= 0 && d.passed <= 8
+          && d.total is int && d.total >= 0 && d.total <= 8
+          && d.bites is int && d.bites >= 0 && d.bites <= 1000
+          && d.done is bool
+          && d.elapsedMs is int && d.elapsedMs >= 0 && d.elapsedMs < 600000
+          && d.grid is string && d.grid.size() <= 16 && d.grid.matches('^[gar]*$')
+          && d.round is int && d.round >= 0 && d.round <= 5;
+      }
+
+      match /players/{uid} {
+        allow read: if true;
+        allow create: if isOwner(uid) && playerOk(request.resource.data)
+          && get(/databases/$(database)/documents/rooms/$(code)).data.phase == 'lobby'
+          && request.resource.data.passed == 0 && request.resource.data.bites == 0 && request.resource.data.done == false;
+        allow update: if isOwner(uid) && playerOk(request.resource.data)
+          && request.resource.data.nickname == resource.data.nickname;
+        // the owner, the host, or any member once the player has gone quiet for 100 seconds (closed tab, lost connection)
+        allow delete: if isOwner(uid)
+          || get(/databases/$(database)/documents/rooms/$(code)).data.hostUid == request.auth.uid
+          || (isSignedIn() && 'seen' in resource.data && resource.data.seen < request.time - duration.value(100, 's')
+              && exists(/databases/$(database)/documents/rooms/$(code)/players/$(request.auth.uid)));
+      }
+    }
+  }
+}

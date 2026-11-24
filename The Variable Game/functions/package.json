@@ -1,0 +1,12 @@
+{
+  "name": "debugr-functions",
+  "private": true,
+  "description": "Server side of debugr.fun: verified ratings and rated quick match",
+  "main": "index.js",
+  "engines": { "node": "20" },
+  "scripts": { "sync": "node sync-shared.js", "test": "node ../tests/functions.test.js" },
+  "dependencies": {
+    "firebase-admin": "^12.1.0",
+    "firebase-functions": "^5.0.0"
+  }
+}
