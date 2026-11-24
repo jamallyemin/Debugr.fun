@@ -1,11 +1,18 @@
 # debugr_
 
 ```
-   .-.   .-.
-  ( o )_( o )     write the code
-   '-'\_/'-'      before the bug eats it
-   _/ | | \_
-  /_/ /_\ \_\
+         ██        ██
+           ██    ██
+             ████
+           ████████
+     ██    ████████    ██
+       ██  ████████  ██
+         █████  █████
+     █████████  █████████
+   ██    █████  █████    ██
+         █████  █████
+       ██  ███  ███  ██
+     ██      ████      ██
 ```
 
 [![tests](https://github.com/jamallyemin/Debugr.fun/actions/workflows/tests.yml/badge.svg)](https://github.com/jamallyemin/Debugr.fun/actions)
