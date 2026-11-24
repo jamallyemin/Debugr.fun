@@ -1,4 +1,0 @@
-{
-  "firestore": { "rules": "firestore.rules" },
-  "functions": { "source": "functions", "predeploy": ["node functions/sync-shared.js"] }
-}
