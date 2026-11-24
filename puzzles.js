@@ -313,7 +313,7 @@
     let track = "syntax";
     try { const t = localStorage.getItem(KEY_TRACK); if (TRACKS.includes(t)) track = t; } catch {}
     let period = "daily";
-    let cur = null, shownHints = 0, runTimer = null, topCache = {};
+    let cur = null, shownHints = 0, openedAt = 0, runTimer = null, topCache = {};
 
     const editor = $("debug-editor");
     const nums = $("puzzles-line-numbers");
@@ -321,11 +321,65 @@
     function sfx(name) { if (typeof Sound !== "undefined") Sound.play(name); }
 
     // path screen
+    function ratingCard() {
+      if (typeof Ratings === "undefined") return "";
+      const st = Ratings.get().puz, tp = Rating.tierProgress(st.r), placing = st.g < Rating.PLACEMENT;
+      return `<div class="pm-rating" style="--tier:${tp.tier.color}">
+          <div class="pr-top"><span class="pr-num">${st.r}${placing ? "?" : ""}</span><span class="pr-tier">${placing ? "PLACING " + st.g + "/" + Rating.PLACEMENT : tp.tier.name}</span></div>
+          <div class="pr-bar"><i style="width:${Math.round(tp.pct * 100)}%"></i></div>
+          <div class="pr-next">${tp.next ? tp.toNext + " to " + tp.next.name : "top tier"}</div>
+        </div>`;
+    }
+    // small local history for the chart and stat tiles (last 30 first-clears)
+    const SKEY = "debugr_puz_stats";
+    const readStats = () => { try { const s = JSON.parse(localStorage.getItem(SKEY)); if (s && Array.isArray(s.hist)) return s; } catch {} return { hist: [], times: [], weak: {} }; };
+    function pushStat(rating, ms, tr, hints) {
+      const s = readStats();
+      s.hist.push(rating); s.times.push(ms);
+      const w = s.weak[tr] || (s.weak[tr] = { n: 0, hints: 0 }); w.n++; w.hints += hints;
+      s.hist = s.hist.slice(-30); s.times = s.times.slice(-30);
+      try { localStorage.setItem(SKEY, JSON.stringify(s)); } catch {}
+    }
+    function chartCard(st) {
+      const h = readStats().hist.slice(-30);
+      if (h.length < 2) return `<div class="pm-card"><div class="pm-k"><span>LAST 30 PUZZLES</span><span>PEAK ${st.peak}</span></div><p class="pm-empty-chart">Clear a few levels and your rating curve shows up here.</p></div>`;
+      const lo = Math.min(...h), hi = Math.max(...h), span = Math.max(40, hi - lo), W = 340, H = 110;
+      const pts = h.map((v, i) => `${Math.round(i * W / (h.length - 1))},${Math.round(H - 8 - (v - lo) / span * (H - 16))}`);
+      const last = pts[pts.length - 1].split(",");
+      return `<div class="pm-card"><div class="pm-k"><span>LAST ${h.length} PUZZLES</span><span>PEAK ${st.peak}</span></div>
+        <svg class="pm-chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Rating over your last ${h.length} puzzles, from ${h[0]} to ${h[h.length - 1]}">
+          <line x1="0" y1="${H * .25}" x2="${W}" y2="${H * .25}"/><line x1="0" y1="${H * .5}" x2="${W}" y2="${H * .5}"/><line x1="0" y1="${H * .75}" x2="${W}" y2="${H * .75}"/>
+          <polyline points="${pts.join(" ")}"/><circle cx="${last[0]}" cy="${last[1]}" r="4.5"/></svg>
+        <div class="pm-k"><span>${h[0]}</span><span>now ${h[h.length - 1]}</span></div></div>`;
+    }
+    function statTiles() {
+      const s = readStats(), cleared = TRACKS.reduce((a, t) => a + PuzzleState.completedCount(t), 0);
+      const avg = s.times.length ? (s.times.reduce((a, b) => a + b, 0) / s.times.length / 1000) : null;
+      let weak = null, worst = 0.4;
+      TRACKS.forEach((t) => { const w = s.weak[t]; if (w && w.n >= 3 && w.hints / w.n > worst) { worst = w.hints / w.n; weak = TRACK_INFO[t].name; } });
+      return `<div class="pm-tiles">
+        <div class="pm-tile"><span class="pm-k">SOLVED</span><b>${cleared}</b></div>
+        <div class="pm-tile"><span class="pm-k">AVG TIME</span><b>${avg === null ? "-" : avg < 100 ? avg.toFixed(1) + "s" : Math.round(avg / 60) + "m"}</b></div>
+        <div class="pm-tile"><span class="pm-k">WEAKEST</span><b class="small">${weak || "none yet"}</b></div></div>`;
+    }
+    function ratingCard() {
+      if (typeof Ratings === "undefined") return "";
+      const st = Ratings.get().puz, tp = Rating.tierProgress(st.r), placing = st.g < Rating.PLACEMENT;
+      const tiers = Rating.TIERS.map((t) => `<span class="${t.name === tp.tier.name ? "here" : ""}">${t.name}</span>`).join("");
+      return `<div class="pm-rating pm-card" style="--tier:${tp.tier.color}">
+          <div class="pm-k"><span>PUZZLE RATING</span><button type="button" class="pm-share" id="pm-share">SHARE</button></div>
+          <div class="pr-top"><span class="pr-num">${st.r}${placing ? "?" : ""}</span><span class="pr-tier">${placing ? "PLACING " + st.g + "/" + Rating.PLACEMENT : tp.tier.name}</span></div>
+          <div class="pr-bar"><i style="width:${Math.round(tp.pct * 100)}%"></i></div>
+          <div class="pm-k"><span>${tp.tier.name} ${tp.tier.min}</span><span>${tp.next ? tp.toNext + " to " + tp.next.name + " " + tp.next.min : "top tier"}</span></div>
+          <div class="pr-tiers">${tiers}</div>
+        </div>`;
+    }
     function paintMeta() {
+      const st = typeof Ratings === "undefined" ? { peak: 0 } : Ratings.get().puz;
       const streak = PlayerState.currentPuzzleStreak();
-      $("puzzle-meta").innerHTML = `
-        <div class="pm-streak ${streak >= 3 ? "hot" : ""}"><span class="flame">▲</span><b>${streak}</b>PUZZLE STREAK</div>
-        <div class="pm-top">
+      $("puzzle-meta").innerHTML = ratingCard() + chartCard(st) + statTiles() + `
+        <button class="btn primary pm-next" id="pm-next">NEXT PUZZLE · ~${Rating.levelRating(PuzzleState.completedCount(track))}</button>
+        <div class="pm-card pm-top">
           <div class="pm-top-head"><span>TOP SOLVERS</span>
             <span class="pm-toggle">
               <button class="pm-tab ${period === "daily" ? "active" : ""}" data-period="daily">TODAY</button>
@@ -366,27 +420,35 @@
     function paintTrack(flash) {
       const done = PuzzleState.completedCount(track);
       const first = Math.max(0, done - 30);
-      let html = `<div class="puzzle-more">LEVELS NEVER RUN OUT</div>`;
+      let html = `<div class="puzzle-more">LEVELS NEVER RUN OUT · EACH LEVEL SHOWS ITS RATING</div>`;
       for (let i = done + 2; i >= first; i--) {
         const cls = i < done ? "done" : i === done ? "current" : "locked";
         const extra = flash && i === flash.cleared ? " just-cleared" : flash && i === flash.unlocked ? " just-unlocked" : "";
-        const off = Math.round(Math.sin(i * 0.9) * 60);
+        const off = Math.round(Math.sin(i * 0.9) * 62);
         html += `<div class="puzzle-row"><div class="puzzle-slot" style="--off:${off}px">
-          ${i === done ? `<div class="puzzle-marker">▼</div>` : ""}
-          <button class="puzzle-node ${cls}${extra}" data-level="${i}" style="--n:${done + 2 - i}" ${cls === "locked" ? "disabled" : ""} aria-label="Level ${i + 1}"><span>${i + 1}</span></button>
+          
+          <button class="puzzle-node ${cls}${extra}" data-level="${i}" style="--n:${done + 2 - i}" ${cls === "locked" ? "disabled" : ""} aria-label="Level ${i + 1}, rating ${Rating.levelRating(i)}"><span>${i + 1}</span></button>
+          <em class="pn-rating">~${Rating.levelRating(i)}</em><em class="pn-tag ${cls}">${cls === "done" ? "CLEARED" : cls === "current" ? "UP NEXT" : "LOCKED"}</em>
         </div></div>`;
       }
       if (first > 0) html += `<div class="puzzle-more">${first} earlier levels cleared</div>`;
       $("puzzle-tracks").innerHTML = html;
       const curEl = $("puzzle-tracks").querySelector(".puzzle-node.current");
-      if (curEl && curEl.scrollIntoView) curEl.scrollIntoView({ block: "center" });
+      // centre the current level inside the roadmap box only (scrollIntoView would also scroll the whole page)
+      const box = $("puzzle-tracks");
+      if (curEl && box.scrollHeight > box.clientHeight) box.scrollTop = curEl.offsetTop + curEl.offsetHeight / 2 - box.clientHeight / 2;
+      const sc = $("screen-puzzle-select"); if (sc && sc.parentElement) sc.parentElement.scrollTop = 0; window.scrollTo(0, 0);
     }
 
     function renderPath(flash) {
       paintMeta(); paintTabs(); paintTrack(flash);
     }
+    // the cloud rating can arrive after the screen is already open
+    document.addEventListener("debugr:rating", () => { const m = $("puzzle-meta"); if (m && m.offsetParent) paintMeta(); });
 
     $("puzzle-meta").addEventListener("click", (e) => {
+      if (e.target.closest("#pm-share")) return void ShareCard.share();
+      if (e.target.closest("#pm-next")) return open(track, PuzzleState.completedCount(track));
       const b = e.target.closest(".pm-tab");
       if (!b) return;
       period = b.dataset.period;
@@ -426,7 +488,7 @@
     function open(t, level) {
       track = t;
       cur = generate(t, level);
-      shownHints = 0;
+      shownHints = 0; openedAt = Date.now();
       clearTimeout(runTimer);
       App.showScreen("puzzles");
       $("puzzles-track-label").textContent = TRACK_INFO[t].name;
@@ -458,6 +520,14 @@
       if (wasNew) {
         PlayerState.bumpStat("puzzles");
         PlayerState.bumpPuzzleStreak();
+        // rated: the first clear of a level only. Hints lower the score, they never make it a loss.
+        Ratings.recordPuzzle({ level, hints: shownHints, wrongRuns: 0, track: cur.track, code: editor.value }).then((c) => {
+          try { pushStat(Ratings.get().puz.r, Math.max(1000, Date.now() - openedAt), cur.track, shownHints); } catch {}
+          const el = $("puzzle-rating-change");
+          if (!el || !c) return;
+          el.textContent = `${c.delta > 0 ? "+" : c.delta < 0 ? "−" : "±"}${Math.abs(c.delta)} RATING${c.tierUp ? " · " + c.tierUp : ""}`;
+          el.className = "ps-rating " + (c.delta > 0 ? "up" : c.delta < 0 ? "down" : "");
+        }).catch(() => { });
         const nick = PlayerState.getNickname();
         if (nick && typeof FirebaseClient !== "undefined") {
           FirebaseClient.recordPuzzleSolve({ nickname: nick, avatar: PlayerState.getAvatar() }).then(() => { topCache = {}; }).catch(() => {});
@@ -465,6 +535,7 @@
       }
       sfx("clear");
       $("puzzle-solved-text").textContent = wasNew ? "LEVEL CLEARED" : "SOLVED AGAIN";
+      if (!wasNew) { $("puzzle-rating-change").textContent = ""; }
       $("puzzle-solved").classList.remove("hidden");
       editor.blur();
       pendingFlash = { cleared: level, unlocked: level + 1 };

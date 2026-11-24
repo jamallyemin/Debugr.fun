@@ -16,6 +16,8 @@ const CloudSave = (() => {
             avatar: PlayerState.getAvatar(),
             puzzleStreak: readJSON(PlayerState.KEY_PUZZLE_STREAK, { count: 0, last: null }),
         };
+        const learn = readJSON("debugr_learn", {});
+        if (Object.keys(learn).length) snap.learn = learn; // lessons finished: { "1.1": 1, ... }
         const nick = PlayerState.getNickname();
         if (nick) snap.nickname = nick;
         return snap;
@@ -37,6 +39,13 @@ const CloudSave = (() => {
         const b = cloud.puzzleStreak || { count: 0, last: null };
         const pick = (a.last || "") !== (b.last || "") ? ((a.last || "") > (b.last || "") ? a : b) : (a.count >= b.count ? a : b);
         localStorage.setItem(PlayerState.KEY_PUZZLE_STREAK, JSON.stringify(pick));
+
+        // lessons finished on either device count
+        if (cloud.learn && typeof cloud.learn === "object") {
+            const mine = readJSON("debugr_learn", {});
+            Object.keys(cloud.learn).forEach((id) => { if (/^\d{1,2}\.\d{1,2}$/.test(id) && cloud.learn[id]) mine[id] = 1; });
+            try { localStorage.setItem("debugr_learn", JSON.stringify(mine)); } catch { }
+        }
 
         if (cloud.avatar && Rewards.LIST.some((a) => a.id === cloud.avatar) && (identity || PlayerState.getAvatar() === "bug")) PlayerState.setAvatar(cloud.avatar);
         if (cloud.nickname && (identity || !PlayerState.getNickname())) PlayerState.setNickname(cloud.nickname);

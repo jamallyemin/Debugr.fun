@@ -1,3 +1,8 @@
+// Server mode. false = ratings are written by the browser (rules in firestore.rules cap every write).
+// true  = ratings and rated quick match go through the Cloud Functions in /functions, and the browser can no longer
+//         write ratings. Only flip this after deploying the functions and publishing functions/firestore.rules.server (see functions/BLAZE.md).
+const USE_CLOUD_FUNCTIONS = false;
+
 const FIREBASE_CONFIG = {
   apiKey: "AIzaSyBOuLlFGbxi67Re84MguESalTT-O-IsGJs",
 

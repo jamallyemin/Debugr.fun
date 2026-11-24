@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://debugr.fun/sitemap.xml

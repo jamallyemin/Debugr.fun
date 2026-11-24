@@ -68,6 +68,7 @@ const Sound = (() => {
     lose: (t) => arp(t, [330, 262, 196], 0.14, { type: "sawtooth", vol: 0.3 }),
     tick: (t) => tone(t, 1300, 0, 0.03, { vol: 0.16 }),
     shred: (t) => noise(t, 0, 0.14, 0.5, 900),
+    bite: (t) => { noise(t, 0, 0.12, 0.6, 700); tone(t, 150, 0, 0.18, { type: "sawtooth", vol: 0.35, to: 70 }); },
     unlock: (t) => { arp(t, [392, 523, 659, 784], 0.1, { vol: 0.35 }); tone(t, 1047, 0.45, 0.4, { type: "triangle", vol: 0.4 }); },
     error: (t) => tone(t, 180, 0, 0.14, { type: "sawtooth", vol: 0.3, to: 120 }),
   };

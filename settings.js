@@ -1,5 +1,5 @@
 const Settings = (() => {
-    const VERSION = "1.1.0";
+    const VERSION = "2.0.0";
     const FX_KEY = "debugr_effects";
 
     const $ = (id) => document.getElementById(id);
@@ -38,8 +38,7 @@ const Settings = (() => {
     let saved = null;
     try { saved = localStorage.getItem(FX_KEY); } catch {}
     if (saved === "on") return true;
-    if (saved === "off") return false;
-    return !(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+    return false; // off unless the player turned it on
   }
   function applyEffects(on) {
     document.documentElement.dataset.effects = on ? "on" : "off";
@@ -74,7 +73,7 @@ const Settings = (() => {
   $("settings-close-btn").addEventListener("click", close);
   popup.addEventListener("click", (e) => { if(e.target === popup) close(); }); //click outside the box
 
-    $("settings-about").textContent = `Debugr.fun v${VERSION}. A debugging game with endless puzzles, daily challenges and live races. Thanks for playing!`;
+    $("settings-about").textContent = `Debugr.fun v${VERSION}. Beat the bug: satisfy the spec before it eats your code. Daily challenges, puzzles and live races. Thanks for playing!`;
  
   return { open, close, version: VERSION };
 })();

@@ -85,7 +85,9 @@ const Rewards = (() => {
         const card = e.target.closest(".av-card:not(:disabled)");
         if (card) equip(card.dataset.id);
     });
-    $("avatar-btn").addEventListener("click", () => { renderGrid(); $("profile-prompt").classList.remove("hidden"); });
+    const openAvatars = () => { renderGrid(); $("profile-prompt").classList.remove("hidden"); };
+    $("avatar-btn").addEventListener("click", () => App.showScreen("profile"));
+    $("profile-x").addEventListener("click", () => $("profile-prompt").classList.add("hidden"));
     $("profile-close-btn").addEventListener("click", () => $("profile-prompt").classList.add("hidden"));
     $("profile-prompt").addEventListener("click", (e) => { if (e.target === $("profile-prompt")) $("profile-prompt").classList.add("hidden"); });
 
@@ -105,9 +107,8 @@ const Rewards = (() => {
     function refresh() {
         const av = PlayerState.getAvatar();
         $("avatar-btn").innerHTML = pic(byId(av));
-        $("ms-pfp").innerHTML = pfp(av);
-        $("ms-user").textContent = PlayerState.getNickname() || "GUEST";
         $("ms-daily").textContent = PlayerState.getStreakCache().daily;
+        $("ms-bites").textContent = PlayerState.getStats().bites || 0;
         $("ms-puzzles").textContent = Object.values(PuzzleState.load()).reduce((a, b) => a + (Number(b) || 0), 0);
         paintTopSolver();
     }
@@ -119,5 +120,5 @@ const Rewards = (() => {
     refresh();
     check();
 
-    return { LIST, pfp, toast, check, refresh, isUnlocked };
+    return { LIST, pfp, toast, check, refresh, isUnlocked, openAvatars };
 })();

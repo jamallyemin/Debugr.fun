@@ -80,7 +80,7 @@
     }
 
     // tokenizer
-    const TWO_CHAR_OPS = ["==", "!=", "<=", ">=", "//", "+=", "-=", "*="];
+    const TWO_CHAR_OPS = ["==", "!=", "<=", ">=", "//", "**", "+=", "-=", "*="];
     const ONE_CHAR_OPS = "+-*/%<>=()[],:.";
 
     function tokenize(code) {
@@ -88,6 +88,7 @@
         const lines = [];
         let cur = null;
         let depth = 0;
+        let fflag = false;
 
         for (let ln = 0; ln < rawLines.length; ln++) {
             const text = rawLines[ln];
@@ -123,6 +124,8 @@
                     continue;
                 }
 
+                if ((c === "f" || c === "F") && (text[i + 1] === '"' || text[i + 1] === "'")) { fflag = true; i++; continue; }
+
                 if (/[A-Za-z_]/.test(c)) {
                     let j = i;
                     while (j < text.length && /[A-Za-z0-9_]/.test(text[j])) j++;
@@ -148,7 +151,8 @@
                         j++;
                     }
                     if (!closed) throw E("SyntaxError", "unterminated string literal", lineNo);
-                    cur.tokens.push({ t: "str", v: buf });
+                    cur.tokens.push({ t: fflag ? "fstr" : "str", v: buf });
+                    fflag = false;
                     i = j;
                     continue;
                 }
@@ -245,7 +249,12 @@
         parseUnary() {
             if (this.isOp("-")) { this.p++; return { t: "neg", e: this.parseUnary() }; }
             if (this.isOp("+")) { this.p++; return this.parseUnary(); }
-            return this.parsePostfix();
+            return this.parsePower();
+        }
+        parsePower() {
+            const l = this.parsePostfix();
+            if (this.isOp("**")) { this.p++; return { t: "bin", op: "**", l, r: this.parseUnary() }; }
+            return l;
         }
         parsePostfix() {
             let n = this.parseAtom();
@@ -281,6 +290,25 @@
             if (!k) throw this.err();
             if (k.t === "num") { this.p++; return { t: "num", v: k.v, float: k.float }; }
             if (k.t === "str") { this.p++; return { t: "str", v: k.v }; }
+            if (k.t === "fstr") {
+                this.p++;
+                const parts = []; let lit = ""; const v = k.v;
+                for (let i = 0; i < v.length; i++) {
+                    if (v[i] === "{" && v[i + 1] === "{") { lit += "{"; i++; }
+                    else if (v[i] === "}" && v[i + 1] === "}") { lit += "}"; i++; }
+                    else if (v[i] === "{") {
+                        const j = v.indexOf("}", i);
+                        if (j < 0) throw this.err("f-string: expecting '}'");
+                        if (lit) { parts.push(lit); lit = ""; }
+                        const toks = tokenize(v.slice(i + 1, j))[0];
+                        if (!toks || !toks.tokens.length) throw this.err("f-string: empty expression not allowed");
+                        parts.push(new ExprParser(toks.tokens, this.line).parseTop());
+                        i = j;
+                    } else lit += v[i];
+                }
+                if (lit) parts.push(lit);
+                return { t: "fstr", parts };
+            }
             if (k.t === "name") {
                 if (k.v === "True" || k.v === "False" || k.v === "None") { this.p++; return { t: "const", v: k.v }; }
                 if (KEYWORDS.has(k.v)) throw this.err();
@@ -426,6 +454,11 @@ function binop(op, a, b) {
     const x = numVal(a);
     const y = numVal(b);
     if (op === "-") return numResult(a, b, x - y);
+    if (op === "**") {
+        const r = Math.pow(x, y);
+        if (!Number.isFinite(r)) throw E("OverflowError", "numerical result out of range");
+        return isIntLike(a) && isIntLike(b) && y >= 0 ? mkInt(r) : mkFloat(r);
+    }
     if (op === "/") {
         if (y === 0) throw E("ZeroDivisionError", "division by zero");
         return mkFloat(x / y);
@@ -524,6 +557,15 @@ function argc(args, n, name) {
       if (!isNum(x)) throw E("TypeError", `bad operand type for abs(): '${typeName(x)}'`);
       return x.k === "float" ? mkFloat(Math.abs(x.v)) : mkInt(Math.abs(numVal(x)));
     },
+    round(args) {
+      if (args.length < 1 || args.length > 2) throw E("TypeError", `round expected 1 or 2 arguments, got ${args.length}`);
+      const x = args[0];
+      if (!isNum(x)) throw E("TypeError", `type ${typeName(x)} doesn't define __round__ method`);
+      const rnd = (v) => { const f = Math.floor(v), d = v - f; return d < 0.5 ? f : d > 0.5 ? f + 1 : (f % 2 === 0 ? f : f + 1); };
+      if (args.length === 1) return mkInt(rnd(numVal(x)));
+      const m = Math.pow(10, numVal(args[1]));
+      return x.k === "float" ? mkFloat(rnd(numVal(x) * m) / m) : x;
+    },
     sorted(args) {
       argc(args, 1, "sorted");
       const items = seqItems(args[0]).slice();
@@ -563,6 +605,16 @@ function argc(args, n, name) {
       argc(args, 0, name);
       return mkStr(name === "upper" ? obj.v.toUpperCase() : obj.v.toLowerCase());
     }
+    if (obj.k === "str" && (name === "title" || name === "strip" || name === "capitalize")) {
+      argc(args, 0, name);
+      const v = obj.v;
+      return mkStr(name === "strip" ? v.trim() : name === "capitalize" ? v.charAt(0).toUpperCase() + v.slice(1).toLowerCase() : v.toLowerCase().replace(/(^|[^a-z])([a-z])/g, (m, a, b) => a + b.toUpperCase()));
+    }
+    if (obj.k === "str" && name === "replace") {
+      argc(args, 2, name);
+      if (args[0].k !== "str" || args[1].k !== "str") throw E("TypeError", "replace() arguments must be str");
+      return mkStr(args[0].v === "" ? obj.v : obj.v.split(args[0].v).join(args[1].v));
+    }
     if (obj.k === "list" && name === "append") {
       argc(args, 1, "append");
       obj.v.push(args[0]);
@@ -577,6 +629,7 @@ function argc(args, n, name) {
     switch (n.t) {
       case "num": return n.float ? mkFloat(n.v) : mkInt(n.v);
       case "str": return mkStr(n.v);
+      case "fstr": return mkStr(n.parts.map((p) => (typeof p === "string" ? p : pyStr(evalExpr(p, ctx)))).join(""));
       case "const": return n.v === "True" ? mkBool(true) : n.v === "False" ? mkBool(false) : NONE;
       case "name": {
         if (ctx.env.has(n.v)) return ctx.env.get(n.v);

@@ -46,7 +46,7 @@ const Daily = (() => {
         badge.classList.toggle("hard", diff === "hard");
         $("daily-hero").classList.toggle("done", !!done);
         $("dh-status").innerHTML = done ? `<b>${secs(done.elapsedMs)}</b> cleared today` : "one task, the same for everyone";
-        $("dh-play-btn").innerHTML = done ? "[ PRACTICE ]" : `[ PLAY ] <span class="key-hint">D</span>`;
+        $("dh-play-btn").innerHTML = done ? "PRACTICE" : `PLAY DAILY <span class="key-hint">D</span>`;
     }
 
     function tickTimer() {
@@ -55,7 +55,7 @@ const Daily = (() => {
         const next = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1);
         const left = Math.max(0, Math.floor((next - now.getTime()) / 1000));
         const p = (n) => String(n).padStart(2, "0");
-        $("dh-timer").textContent = `new one in ${p(Math.floor(left / 3600))}:${p(Math.floor(left / 60) % 60)}:${p(left % 60)}`;
+        $("dh-timer").textContent = `${p(Math.floor(left / 3600))}:${p(Math.floor(left / 60) % 60)}:${p(left % 60)}`;
     }
 
     // daily screen
@@ -68,7 +68,7 @@ const Daily = (() => {
         $("daily-status").innerHTML = done
             ? `Cleared in <b>${secs(done.elapsedMs)}</b>. Replays are just practice, they don't change your rank. A new one arrives at 00:00 UTC.`
             : "One task, the same for everyone. Your first clear of the day counts. A new one arrives at 00:00 UTC.";
-        $("daily-start-btn").textContent = done ? "[ PRACTICE ]" : "[ START ]";
+        $("daily-start-btn").textContent = done ? "PRACTICE" : "START";
         $("daily-copy-btn").classList.toggle("hidden", !done);
 
         const list = $("daily-list");
@@ -92,10 +92,10 @@ const Daily = (() => {
     }
 
     document.addEventListener("debugr:daily-win", async (e) => {
-        const { elapsedMs, difficulty } = e.detail;
+        const { elapsedMs, difficulty, bites = 0, syncs = 0, grid = ["g"] } = e.detail;
         const date = runDate || todayKey();
         if (loadDone(date) || date !== todayKey()) return; // practice run or the day rolled over
-        saveDone({ date, elapsedMs, difficulty });
+        saveDone({ date, elapsedMs, difficulty, bites, syncs, grid });
         PlayerState.bumpStat("dailies");
         document.dispatchEvent(new CustomEvent("debugr:progress"));
         Rewards.check();
@@ -103,13 +103,29 @@ const Daily = (() => {
         try {
             await FirebaseClient.submitDaily({ date, difficulty, elapsedMs, nickname: PlayerState.getNickname(), avatar: PlayerState.getAvatar() });
         } catch (err) { console.warn("daily score not saved online:", err); }
+        paintSide(date, elapsedMs);
     });
+
+    // top 5 next to the result screen
+    async function paintSide(date, myMs) {
+        const side = $("success-side"), list = $("side-list");
+        try {
+            const rows = await FirebaseClient.fetchDaily(date);
+            if ($("success-screen").classList.contains("hidden")) return;
+            const me = FirebaseClient.getUid();
+            const top = rows.slice(0, 5);
+            list.innerHTML = top.length ? top.map((r, i) => `<li class="${r.uid === me ? "you" : ""}"><span class="r">${i + 1}</span><span>${esc(r.nickname)}</span><span class="t">${secs(r.elapsedMs)}</span></li>`).join("") : `<li class="empty">nobody yet</li>`;
+            const rank = rows.findIndex((r) => r.uid === me);
+            $("side-rank").textContent = rank >= 0 ? `you: #${rank + 1} of ${rows.length}` : "";
+            side.classList.remove("hidden");
+        } catch { /* offline: the card just stays hidden */ }
+    }
 
     function shareText() {
         const date = loadDone(todayKey()) ? todayKey() : (runDate || todayKey());
         const d = loadDone(date);
         if (!d) return "";
-        return `Debugr.fun Daily ${date} [${d.difficulty.toUpperCase()}]\nCleared in ${secs(d.elapsedMs)} | ${PlayerState.getStreakCache().daily} day streak\nhttps://debugr.fun`;
+        return App.buildShare({ daily: true, date, difficulty: d.difficulty, elapsedMs: d.elapsedMs, bites: d.bites || 0, grid: d.grid, streak: PlayerState.getStreakCache().daily }).text;
     }
     async function copyResult() {
         const text = shareText();
@@ -129,12 +145,11 @@ const Daily = (() => {
     $("dh-rank-btn").addEventListener("click", () => App.showScreen("daily"));
     $("daily-start-btn").addEventListener("click", start);
     $("daily-copy-btn").addEventListener("click", copyResult);
-    $("daily-share-btn").addEventListener("click", copyResult);
     document.addEventListener("debugr:screen", (e) => { if (e.detail.name === "daily") paintScreen(); });
 
     // D on the menu starts the daily
     document.addEventListener("keydown", (e) => {
-        if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey) return;
+        if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey || (window.SiteKeys && !SiteKeys.on())) return;
         if (e.key !== "d" && e.key !== "D") return;
         if (/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;
         if (App.current() !== "menu") return;
@@ -154,7 +169,7 @@ const Daily = (() => {
             if (loadDone(date)) return;
             try {
                 const r = await FirebaseClient.fetchMyDaily(date);
-                if (r) { saveDone({ date, elapsedMs: r.elapsedMs, difficulty: r.difficulty }); paintHero(); }
+                if (r) { saveDone({ date, elapsedMs: r.elapsedMs, difficulty: r.difficulty, bites: 0, grid: ["g"] }); paintHero(); }
             } catch { }
         }, 500);
     })();

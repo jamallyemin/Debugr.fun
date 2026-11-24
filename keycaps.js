@@ -37,7 +37,7 @@
             });
         }
         // the [1] [2] .. hints in the menu: same look as the other caps
-        document.querySelectorAll(".menu-options .key-hint").forEach((el) => {
+        document.querySelectorAll("#screen-menu .key-hint").forEach((el) => {
             const t = el.textContent.replace(/[\[\]\s]/g, "");
             if (!el.classList.contains("kc") || el.textContent !== t) { el.textContent = t; el.classList.add("kc"); }
         });

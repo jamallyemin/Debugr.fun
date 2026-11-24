@@ -57,13 +57,15 @@
 
         const data = { kind, message, version: Settings.version, screen: App.current().slice(0, 20) };
         if (contact) data.contact = contact;
+        const withTech = $("fb-tech") && $("fb-tech").checked && typeof ErrLog !== "undefined";
+        if (withTech) data.tech = ErrLog.summary(data.screen);
         const nick = PlayerState.getNickname();
         if (nick) data.nickname = nick;
 
         let saved = false;
         try { await FirebaseClient.submitFeedback(data); saved = true; }
         catch (err) { console.warn("feedback not saved to firestore:", err); }
-        const mailed = await emailCopy(message, contact);
+        const mailed = await emailCopy(message + (data.tech ? "\n\n[technical details]\n" + data.tech : ""), contact);
 
         sending = false;
         $("fb-send-btn").disabled = false;
